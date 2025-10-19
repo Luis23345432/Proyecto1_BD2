@@ -40,7 +40,7 @@ WHERE ST_DWithin(
 )
 ORDER BY distancia_km;
 
-
+-- Funcionando
 -- BÚSQUEDA K-NN (kNN)
 -- Los 10 restaurantes más cercanos
 SELECT 
