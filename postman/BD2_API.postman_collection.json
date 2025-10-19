@@ -833,78 +833,32 @@
 					"response": []
 				},
 				{
-					"name": "POST /records/range-radius (5km aprox)",
+					"name": "POST /query (SELECT NEAR by radius ~5km)",
 					"request": {
 						"method": "POST",
 						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
+							{ "key": "Content-Type", "value": "application/json" }
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"column\": \"coord\",\n  \"center\": [19.435, -99.135],\n  \"radius\": 0.01\n}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
+							"raw": "{\n  \"sql\": \"SELECT * FROM {{placesTable}} WHERE NEAR(coord, [19.435, -99.135]) RADIUS 0.05;\"\n}"
 						},
-						"url": {
-							"raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/tables/{{placesTable}}/records/range-radius",
-							"host": [
-								"{{baseUrl}}"
-							],
-							"path": [
-								"users",
-								"{{userId}}",
-								"databases",
-								"{{dbName}}",
-								"tables",
-								"{{placesTable}}",
-								"records",
-								"range-radius"
-							]
-						}
+						"url": { "raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/query", "host": [ "{{baseUrl}}" ], "path": [ "users", "{{userId}}", "databases", "{{dbName}}", "query" ] }
 					},
 					"response": []
 				},
 				{
-					"name": "POST /records/knn (k=1)",
+					"name": "POST /query (SELECT KNN k=1)",
 					"request": {
 						"method": "POST",
 						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
+							{ "key": "Content-Type", "value": "application/json" }
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"column\": \"coord\",\n  \"center\": [19.435, -99.135],\n  \"k\": 1\n}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
+							"raw": "{\n  \"sql\": \"SELECT * FROM {{placesTable}} WHERE KNN(coord, [19.435, -99.135]) K 1;\"\n}"
 						},
-						"url": {
-							"raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/tables/{{placesTable}}/records/knn",
-							"host": [
-								"{{baseUrl}}"
-							],
-							"path": [
-								"users",
-								"{{userId}}",
-								"databases",
-								"{{dbName}}",
-								"tables",
-								"{{placesTable}}",
-								"records",
-								"knn"
-							]
-						}
+						"url": { "raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/query", "host": [ "{{baseUrl}}" ], "path": [ "users", "{{userId}}", "databases", "{{dbName}}", "query" ] }
 					},
 					"response": []
 				}

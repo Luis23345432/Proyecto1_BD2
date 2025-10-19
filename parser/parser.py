@@ -152,23 +152,42 @@ class SQLParser:
         self._eat('KW', 'FROM')
         table = self._eat('IDENT').value
         condition = None
+        spatial: Optional[Dict[str, Any]] = None
         t = self._peek()
         if t and t.type == 'KW' and t.value == 'WHERE':
             self._eat('KW', 'WHERE')
             # clause: col = value  OR col BETWEEN x AND y
-            col = self._eat('IDENT').value
-            t2 = self._peek()
-            if t2 and t2.type == 'KW' and t2.value == 'BETWEEN':
-                self._eat('KW', 'BETWEEN')
-                v1 = self._parse_value()
-                self._eat('KW', 'AND')
-                v2 = self._parse_value()
-                condition = Condition(column=col, op='BETWEEN', value=v1, value2=v2)
+            t_near = self._peek()
+            # Spatial variants
+            if t_near and t_near.type == 'KW' and t_near.value in ('NEAR', 'KNN'):
+                kind = self._eat('KW').value  # NEAR or KNN
+                self._eat('PUNC', '(')
+                col = self._eat('IDENT').value
+                self._eat('PUNC', ',')
+                center = self._parse_value()  # expect array [lat, lon] or string 'lat, lon'
+                self._eat('PUNC', ')')
+                if kind == 'NEAR':
+                    self._eat('KW', 'RADIUS')
+                    radius_val = self._parse_value()
+                    spatial = {"kind": "NEAR", "column": col, "center": center, "radius": radius_val}
+                else:
+                    self._eat('KW', 'K')
+                    k_val = self._parse_value()
+                    spatial = {"kind": "KNN", "column": col, "center": center, "k": k_val}
             else:
-                self._eat('OP') if (t2 and t2.type == 'OP') else self._eat('PUNC', '=')
-                v = self._parse_value()
-                condition = Condition(column=col, op='=', value=v)
-        return SelectStmt(table=table, columns=cols, condition=condition)
+                col = self._eat('IDENT').value
+                t2 = self._peek()
+                if t2 and t2.type == 'KW' and t2.value == 'BETWEEN':
+                    self._eat('KW', 'BETWEEN')
+                    v1 = self._parse_value()
+                    self._eat('KW', 'AND')
+                    v2 = self._parse_value()
+                    condition = Condition(column=col, op='BETWEEN', value=v1, value2=v2)
+                else:
+                    self._eat('OP') if (t2 and t2.type == 'OP') else self._eat('PUNC', '=')
+                    v = self._parse_value()
+                    condition = Condition(column=col, op='=', value=v)
+        return SelectStmt(table=table, columns=cols, condition=condition, spatial=spatial)
 
     def _parse_insert(self) -> InsertStmt:
         self._eat('KW', 'INSERT')

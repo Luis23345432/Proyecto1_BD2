@@ -9,6 +9,8 @@ KEYWORDS = {
     "CREATE", "TABLE", "FROM", "FILE", "USING", "INDEX", "SELECT", "INSERT",
     "INTO", "VALUES", "DELETE", "WHERE", "BETWEEN", "AND", "OR", "NOT", "AS",
     "FLOAT", "INT", "VARCHAR", "DATE", "ARRAY", "PRIMARY", "KEY", "UNIQUE", "*",
+    # Spatial/extended
+    "NEAR", "RADIUS", "KNN", "K",
 }
 
 
