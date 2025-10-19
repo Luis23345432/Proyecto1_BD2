@@ -1,494 +1,972 @@
 {
-  "info": {
-    "name": "Proyecto BD2 API",
-  "description": "Colección para probar el backend FastAPI del Proyecto BD2: usuarios, bases de datos, tablas, registros, SQL (DDL), RTREE espacial y carga CSV.",
-    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
-  },
-  "item": [
-    {
-      "name": "Health",
-      "item": [
-        {
-          "name": "GET /healthz",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/healthz",
-              "host": ["{{baseUrl}}"],
-              "path": ["healthz"]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "Users",
-      "item": [
-        {
-          "name": "POST /users (create user)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {"key": "Content-Type", "value": "application/json"}
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"user_id\": \"{{userId}}\"\n}",
-              "options": {"raw": {"language": "json"}}
-            },
-            "url": {
-              "raw": "{{baseUrl}}/users",
-              "host": ["{{baseUrl}}"],
-              "path": ["users"]
-            }
-          }
-        },
-        {
-          "name": "GET /users (list)",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/users",
-              "host": ["{{baseUrl}}"],
-              "path": ["users"]
-            }
-          }
-        },
-        {
-          "name": "GET /users/{user_id}",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/users/{{userId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["users", "{{userId}}"]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "Databases",
-      "item": [
-        {
-          "name": "POST /databases (create)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {"key": "Content-Type", "value": "application/json"}
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"{{dbName}}\"\n}",
-              "options": {"raw": {"language": "json"}}
-            },
-            "url": {
-              "raw": "{{baseUrl}}/users/{{userId}}/databases",
-              "host": ["{{baseUrl}}"],
-              "path": ["users", "{{userId}}", "databases"]
-            }
-          }
-        },
-        {
-          "name": "GET /databases (list)",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/users/{{userId}}/databases",
-              "host": ["{{baseUrl}}"],
-              "path": ["users", "{{userId}}", "databases"]
-            }
-          }
-        },
-        {
-          "name": "GET /databases/{db_name}",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["users", "{{userId}}", "databases", "{{dbName}}"]
-            }
-          }
-        },
-        {
-          "name": "DELETE /databases/{db_name}",
-          "request": {
-            "method": "DELETE",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["users", "{{userId}}", "databases", "{{dbName}}"]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "Tables",
-      "item": [
-        {
-          "name": "POST /tables (create: people)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {"key": "Content-Type", "value": "application/json"}
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"{{tableName}}\",\n  \"columns\": [\n    { \"name\": \"id\", \"type\": \"INT\", \"nullable\": false, \"primary_key\": true },\n    { \"name\": \"name\", \"type\": \"VARCHAR\", \"length\": 64 },\n    { \"name\": \"age\", \"type\": \"INT\" }\n  ],\n  \"indexes\": [\n    { \"type\": \"BTREE\", \"column\": \"id\" },\n    { \"type\": \"HASH\", \"column\": \"name\" }\n  ]\n}",
-              "options": {"raw": {"language": "json"}}
-            },
-            "url": {
-              "raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/tables",
-              "host": ["{{baseUrl}}"],
-              "path": ["users", "{{userId}}", "databases", "{{dbName}}", "tables"]
-            }
-          }
-        },
-        {
-          "name": "GET /tables (list)",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/tables",
-              "host": ["{{baseUrl}}"],
-              "path": ["users", "{{userId}}", "databases", "{{dbName}}", "tables"]
-            }
-          }
-        },
-        {
-          "name": "GET /tables/{table_name}",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/tables/{{tableName}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["users", "{{userId}}", "databases", "{{dbName}}", "tables", "{{tableName}}"]
-            }
-          }
-        },
-        {
-          "name": "GET /tables/{table_name}/schema",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/tables/{{tableName}}/schema",
-              "host": ["{{baseUrl}}"],
-              "path": ["users", "{{userId}}", "databases", "{{dbName}}", "tables", "{{tableName}}", "schema"]
-            }
-          }
-        },
-        {
-          "name": "GET /tables/{table_name}/stats",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/tables/{{tableName}}/stats",
-              "host": ["{{baseUrl}}"],
-              "path": ["users", "{{userId}}", "databases", "{{dbName}}", "tables", "{{tableName}}", "stats"]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "Records",
-      "item": [
-        {
-          "name": "POST /records (insert 1)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {"key": "Content-Type", "value": "application/json"}
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"values\": { \"id\": 1, \"name\": \"Alice\", \"age\": 30 }\n}",
-              "options": {"raw": {"language": "json"}}
-            },
-            "url": {
-              "raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/tables/{{tableName}}/records",
-              "host": ["{{baseUrl}}"],
-              "path": ["users", "{{userId}}", "databases", "{{dbName}}", "tables", "{{tableName}}", "records"]
-            }
-          }
-        },
-        {
-          "name": "POST /records (insert 2)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {"key": "Content-Type", "value": "application/json"}
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"values\": { \"id\": 2, \"name\": \"Bob\", \"age\": 25 }\n}",
-              "options": {"raw": {"language": "json"}}
-            },
-            "url": {
-              "raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/tables/{{tableName}}/records",
-              "host": ["{{baseUrl}}"],
-              "path": ["users", "{{userId}}", "databases", "{{dbName}}", "tables", "{{tableName}}", "records"]
-            }
-          }
-        },
-        {
-          "name": "GET /records?limit=100&offset=0",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/tables/{{tableName}}/records?limit=100&offset=0",
-              "host": ["{{baseUrl}}"],
-              "path": ["users", "{{userId}}", "databases", "{{dbName}}", "tables", "{{tableName}}", "records"],
-              "query": [
-                {"key": "limit", "value": "100"},
-                {"key": "offset", "value": "0"}
-              ]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "SQL",
-      "item": [
-        {
-          "name": "POST /query (SELECT all)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {"key": "Content-Type", "value": "application/json"}
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"sql\": \"SELECT * FROM {{tableName}};\"\n}",
-              "options": {"raw": {"language": "json"}}
-            },
-            "url": {
-              "raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/query",
-              "host": ["{{baseUrl}}"],
-              "path": ["users", "{{userId}}", "databases", "{{dbName}}", "query"]
-            }
-          }
-        },
-        
-        {
-          "name": "POST /query (SELECT by id)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {"key": "Content-Type", "value": "application/json"}
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"sql\": \"SELECT * FROM {{tableName}} WHERE id = 1;\"\n}",
-              "options": {"raw": {"language": "json"}}
-            },
-            "url": {
-              "raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/query",
-              "host": ["{{baseUrl}}"],
-              "path": ["users", "{{userId}}", "databases", "{{dbName}}", "query"]
-            }
-          }
-        },
-        {
-          "name": "POST /query (SELECT by name)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {"key": "Content-Type", "value": "application/json"}
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"sql\": \"SELECT * FROM {{tableName}} WHERE name = 'Alice';\"\n}",
-              "options": {"raw": {"language": "json"}}
-            },
-            "url": {
-              "raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/query",
-              "host": ["{{baseUrl}}"],
-              "path": ["users", "{{userId}}", "databases", "{{dbName}}", "query"]
-            }
-          }
-        },
-        {
-          "name": "POST /query (CREATE TABLE DDL {{restaurantsTable}})",
-          "request": {
-            "method": "POST",
-            "header": [
-              {"key": "Content-Type", "value": "application/json"}
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"sql\": \"CREATE TABLE {{restaurantsTable}} ( id INT KEY, nombre VARCHAR[20] INDEX BTREE, fechaRegistro DATE, ubicacion ARRAY[FLOAT] INDEX RTREE );\"\n}",
-              "options": {"raw": {"language": "json"}}
-            },
-            "url": {
-              "raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/query",
-              "host": ["{{baseUrl}}"],
-              "path": ["users", "{{userId}}", "databases", "{{dbName}}", "query"]
-            }
-          }
-        },
-        
-        {
-          "name": "POST /query (SELECT {{restaurantsTable}})",
-          "request": {
-            "method": "POST",
-            "header": [
-              {"key": "Content-Type", "value": "application/json"}
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"sql\": \"SELECT * FROM {{restaurantsTable}};\"\n}",
-              "options": {"raw": {"language": "json"}}
-            },
-            "url": {
-              "raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/query",
-              "host": ["{{baseUrl}}"],
-              "path": ["users", "{{userId}}", "databases", "{{dbName}}", "query"]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "Spatial (RTREE)",
-      "item": [
-        {
-          "name": "POST /query (CREATE {{placesTable}} with RTREE)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {"key": "Content-Type", "value": "application/json"}
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"sql\": \"CREATE TABLE {{placesTable}} ( id INT KEY, coord ARRAY[FLOAT] INDEX RTREE, label VARCHAR[32] );\"\n}",
-              "options": {"raw": {"language": "json"}}
-            },
-            "url": {
-              "raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/query",
-              "host": ["{{baseUrl}}"],
-              "path": ["users", "{{userId}}", "databases", "{{dbName}}", "query"]
-            }
-          }
-        },
-        {
-          "name": "POST /query (INSERT RTREE point A)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {"key": "Content-Type", "value": "application/json"}
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"sql\": \"INSERT INTO {{placesTable}} VALUES ( id=1, coord='19.43, -99.13', label='A' );\"\n}",
-              "options": {"raw": {"language": "json"}}
-            },
-            "url": {
-              "raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/query",
-              "host": ["{{baseUrl}}"],
-              "path": ["users", "{{userId}}", "databases", "{{dbName}}", "query"]
-            }
-          }
-        },
-        {
-          "name": "POST /query (INSERT RTREE point B)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {"key": "Content-Type", "value": "application/json"}
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"sql\": \"INSERT INTO {{placesTable}} VALUES ( id=2, coord='19.44, -99.14', label='B' );\"\n}",
-              "options": {"raw": {"language": "json"}}
-            },
-            "url": {
-              "raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/query",
-              "host": ["{{baseUrl}}"],
-              "path": ["users", "{{userId}}", "databases", "{{dbName}}", "query"]
-            }
-          }
-        },
-        {
-          "name": "POST /records/range-radius (5km aprox)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {"key": "Content-Type", "value": "application/json"}
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"column\": \"coord\",\n  \"center\": [19.435, -99.135],\n  \"radius\": 0.01\n}",
-              "options": {"raw": {"language": "json"}}
-            },
-            "url": {
-              "raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/tables/{{placesTable}}/records/range-radius",
-              "host": ["{{baseUrl}}"],
-              "path": ["users", "{{userId}}", "databases", "{{dbName}}", "tables", "{{placesTable}}", "records", "range-radius"]
-            }
-          }
-        },
-        {
-          "name": "POST /records/knn (k=1)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {"key": "Content-Type", "value": "application/json"}
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"column\": \"coord\",\n  \"center\": [19.435, -99.135],\n  \"k\": 1\n}",
-              "options": {"raw": {"language": "json"}}
-            },
-            "url": {
-              "raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/tables/{{placesTable}}/records/knn",
-              "host": ["{{baseUrl}}"],
-              "path": ["users", "{{userId}}", "databases", "{{dbName}}", "tables", "{{placesTable}}", "records", "knn"]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "Import CSV",
-      "item": [
-        {
-          "name": "POST /load-csv (upload sample_people.csv)",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "body": {
-              "mode": "formdata",
-              "formdata": [
-                {
-                  "key": "file",
-                  "type": "file",
-                  "src": "postman/sample_people.csv"
-                }
-              ]
-            },
-            "url": {
-              "raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/tables/{{tableName}}/load-csv",
-              "host": ["{{baseUrl}}"],
-              "path": ["users", "{{userId}}", "databases", "{{dbName}}", "tables", "{{tableName}}", "load-csv"]
-            }
-          }
-        }
-      ]
-    }
-  ]
+	"info": {
+		"_postman_id": "77fe680c-4f11-4d36-b6a9-4f66bcedef63",
+		"name": "Proyecto BD2 API",
+		"description": "Colección para probar el backend FastAPI del Proyecto BD2: usuarios, bases de datos, tablas, registros, SQL (DDL), RTREE espacial y carga CSV.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "34047895"
+	},
+	"item": [
+		{
+			"name": "Health",
+			"item": [
+				{
+					"name": "GET /healthz",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/healthz",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"healthz"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Users",
+			"item": [
+				{
+					"name": "POST /users (create user)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"user_id\": \"{{userId}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/users",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"users"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GET /users (list)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/users",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"users"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GET /users/{user_id}",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/users/{{userId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"users",
+								"{{userId}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "register",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n\"username\": \"juan2\",\r\n \"password\": \"123456\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/users/register",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"users",
+								"register"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "login",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\"username\": \"juan2\", \"password\": \"123456\"}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8000/users/login",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"users",
+								"login"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Databases",
+			"item": [
+				{
+					"name": "POST /databases (create)",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJqdWFuMiIsImV4cCI6MTc2MDg5NDg4MH0.bXcp9cw3pCZ2iL2GZvFftnggCpKi0QbOFNYW-6M3R6w",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"{{dbName}}2\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/users/{{userId}}/databases",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"users",
+								"{{userId}}",
+								"databases"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GET /databases (list)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/users/{{userId}}/databases",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"users",
+								"{{userId}}",
+								"databases"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GET /databases/{db_name}",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"users",
+								"{{userId}}",
+								"databases",
+								"{{dbName}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "DELETE /databases/{db_name}",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"users",
+								"{{userId}}",
+								"databases",
+								"{{dbName}}"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Tables",
+			"item": [
+				{
+					"name": "POST /tables (create: people)",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJqdWFuMiIsImV4cCI6MTc2MDg5NDg4MH0.bXcp9cw3pCZ2iL2GZvFftnggCpKi0QbOFNYW-6M3R6w",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"{{tableName}}2\",\n  \"columns\": [\n    { \"name\": \"id\", \"type\": \"INT\", \"nullable\": false, \"primary_key\": true },\n    { \"name\": \"name\", \"type\": \"VARCHAR\", \"length\": 64 },\n    { \"name\": \"age\", \"type\": \"INT\" }\n  ],\n  \"indexes\": [\n    { \"type\": \"BTREE\", \"column\": \"id\" },\n    { \"type\": \"HASH\", \"column\": \"name\" }\n  ]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/tables",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"users",
+								"{{userId}}",
+								"databases",
+								"{{dbName}}",
+								"tables"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GET /tables (list)",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJqdWFuMiIsImV4cCI6MTc2MDg5NDg4MH0.bXcp9cw3pCZ2iL2GZvFftnggCpKi0QbOFNYW-6M3R6w",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/tables",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"users",
+								"{{userId}}",
+								"databases",
+								"{{dbName}}",
+								"tables"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GET /tables/{table_name}",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/tables/{{tableName}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"users",
+								"{{userId}}",
+								"databases",
+								"{{dbName}}",
+								"tables",
+								"{{tableName}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GET /tables/{table_name}/schema",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJqdWFuMiIsImV4cCI6MTc2MDg5NDg4MH0.bXcp9cw3pCZ2iL2GZvFftnggCpKi0QbOFNYW-6M3R6w",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/tables/{{tableName}}/schema",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"users",
+								"{{userId}}",
+								"databases",
+								"{{dbName}}",
+								"tables",
+								"{{tableName}}",
+								"schema"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GET /tables/{table_name}/stats",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/tables/{{tableName}}/stats",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"users",
+								"{{userId}}",
+								"databases",
+								"{{dbName}}",
+								"tables",
+								"{{tableName}}",
+								"stats"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Records",
+			"item": [
+				{
+					"name": "POST /records (insert 1)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"values\": { \"id\": 1, \"name\": \"Alice\", \"age\": 30 }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/tables/{{tableName}}/records",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"users",
+								"{{userId}}",
+								"databases",
+								"{{dbName}}",
+								"tables",
+								"{{tableName}}",
+								"records"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "POST /records (insert 2)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"values\": { \"id\": 2, \"name\": \"Bob\", \"age\": 25 }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/tables/{{tableName}}/records",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"users",
+								"{{userId}}",
+								"databases",
+								"{{dbName}}",
+								"tables",
+								"{{tableName}}",
+								"records"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GET /records?limit=100&offset=0",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/tables/{{tableName}}/records?limit=100&offset=0",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"users",
+								"{{userId}}",
+								"databases",
+								"{{dbName}}",
+								"tables",
+								"{{tableName}}",
+								"records"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "100"
+								},
+								{
+									"key": "offset",
+									"value": "0"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "SQL",
+			"item": [
+				{
+					"name": "POST /query (SELECT all)",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJqdWFuMiIsImV4cCI6MTc2MDg5NDg4MH0.bXcp9cw3pCZ2iL2GZvFftnggCpKi0QbOFNYW-6M3R6w",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"sql\": \"SELECT * FROM {{tableName}};\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/query",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"users",
+								"{{userId}}",
+								"databases",
+								"{{dbName}}",
+								"query"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "POST /query (SELECT by id)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"sql\": \"SELECT * FROM {{tableName}} WHERE id = 1;\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/query",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"users",
+								"{{userId}}",
+								"databases",
+								"{{dbName}}",
+								"query"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "POST /query (SELECT by name)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"sql\": \"SELECT * FROM {{tableName}} WHERE name = 'Alice';\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/query",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"users",
+								"{{userId}}",
+								"databases",
+								"{{dbName}}",
+								"query"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "POST /query (CREATE TABLE DDL {{restaurantsTable}})",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"sql\": \"CREATE TABLE {{restaurantsTable}} ( id INT KEY, nombre VARCHAR[20] INDEX BTREE, fechaRegistro DATE, ubicacion ARRAY[FLOAT] INDEX RTREE );\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/query",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"users",
+								"{{userId}}",
+								"databases",
+								"{{dbName}}",
+								"query"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "POST /query (SELECT {{restaurantsTable}})",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"sql\": \"SELECT * FROM {{restaurantsTable}};\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/query",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"users",
+								"{{userId}}",
+								"databases",
+								"{{dbName}}",
+								"query"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Spatial (RTREE)",
+			"item": [
+				{
+					"name": "POST /query (CREATE {{placesTable}} with RTREE)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"sql\": \"CREATE TABLE {{placesTable}} ( id INT KEY, coord ARRAY[FLOAT] INDEX RTREE, label VARCHAR[32] );\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/query",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"users",
+								"{{userId}}",
+								"databases",
+								"{{dbName}}",
+								"query"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "POST /query (INSERT RTREE point A)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"sql\": \"INSERT INTO {{placesTable}} VALUES ( id=1, coord='19.43, -99.13', label='A' );\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/query",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"users",
+								"{{userId}}",
+								"databases",
+								"{{dbName}}",
+								"query"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "POST /query (INSERT RTREE point B)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"sql\": \"INSERT INTO {{placesTable}} VALUES ( id=2, coord='19.44, -99.14', label='B' );\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/query",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"users",
+								"{{userId}}",
+								"databases",
+								"{{dbName}}",
+								"query"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "POST /records/range-radius (5km aprox)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"column\": \"coord\",\n  \"center\": [19.435, -99.135],\n  \"radius\": 0.01\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/tables/{{placesTable}}/records/range-radius",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"users",
+								"{{userId}}",
+								"databases",
+								"{{dbName}}",
+								"tables",
+								"{{placesTable}}",
+								"records",
+								"range-radius"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "POST /records/knn (k=1)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"column\": \"coord\",\n  \"center\": [19.435, -99.135],\n  \"k\": 1\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/tables/{{placesTable}}/records/knn",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"users",
+								"{{userId}}",
+								"databases",
+								"{{dbName}}",
+								"tables",
+								"{{placesTable}}",
+								"records",
+								"knn"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Import CSV",
+			"item": [
+				{
+					"name": "POST /load-csv (upload sample_people.csv)",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJqdWFuMiIsImV4cCI6MTc2MDg5NDg4MH0.bXcp9cw3pCZ2iL2GZvFftnggCpKi0QbOFNYW-6M3R6w",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": "/C:/Users/joeld/Desktop/Proyecto1_BD2/postman/sample_people.csv"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/tables/{{tableName}}/load-csv",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"users",
+								"{{userId}}",
+								"databases",
+								"{{dbName}}",
+								"tables",
+								"{{tableName}}",
+								"load-csv"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://127.0.0.1:8000"
+		},
+		{
+			"key": "userId",
+			"value": "juan2"
+		}
+	]
 }
