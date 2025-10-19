@@ -34,7 +34,15 @@ class Record:
                 out[name] = None
                 continue
             v = values[name]
-            out[name] = convert_value(col.col_type, v, max_len=col.length)
+
+            # ← AGREGAR ESTOS PRINTS
+            print(f"DEBUG _coerce columna={name}, col_type={col.col_type}, value={v}, tipo={type(v)}")
+
+            result = convert_value(col.col_type, v, max_len=col.length)
+
+            print(f"DEBUG _coerce después convert_value: result={result}, tipo={type(result)}")
+
+            out[name] = result
         return out
 
     def to_dict(self) -> Dict[str, Any]:

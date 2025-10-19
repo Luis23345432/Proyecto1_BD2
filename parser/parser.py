@@ -176,18 +176,23 @@ class SQLParser:
         table = self._eat('IDENT').value
         self._eat('KW', 'VALUES')
         self._eat('PUNC', '(')
-        values: Dict[str, Any] = {}
-        # Parse name=value pairs or positional? We'll accept name=value pairs for simplicity
+
+        # Parse positional values (standard SQL syntax)
+        positional_values = []
         while True:
-            key = self._eat('IDENT').value
-            self._eat('PUNC', '=')
-            values[key] = self._parse_value()
+            positional_values.append(self._parse_value())
+
             t = self._peek()
             if t and t.type == 'PUNC' and t.value == ',':
                 self._eat('PUNC', ',')
                 continue
             break
+
         self._eat('PUNC', ')')
+
+        # Store as positional for executor to map to column names
+        values = {"__positional__": positional_values}
+
         return InsertStmt(table=table, values=values)
 
     def _parse_delete(self) -> DeleteStmt:
@@ -205,13 +210,62 @@ class SQLParser:
         return DeleteStmt(table=table, condition=condition)
 
     def _parse_value(self):
+        t = self._peek()
+
+        # Handle arrays [...]
+        if t and t.type == 'PUNC' and t.value == '[':
+            self._eat('PUNC', '[')
+            array_values = []
+
+            # Empty array
+            t = self._peek()
+            if t and t.type == 'PUNC' and t.value == ']':
+                self._eat('PUNC', ']')
+                return array_values
+
+            # Parse array elements
+            while True:
+                elem_t = self._peek()
+
+                # Handle negative/positive numbers with explicit sign
+                if elem_t and elem_t.type == 'OP' and elem_t.value in ('+', '-'):
+                    sign = self._eat('OP').value
+                    num_t = self._eat('NUMBER')
+                    num_val = float(num_t.value) if '.' in num_t.value else int(num_t.value)
+                    if sign == '-':
+                        num_val = -num_val
+                    array_values.append(num_val)
+                elif elem_t and elem_t.type == 'NUMBER':
+                    num_t = self._eat('NUMBER')
+                    num_val = float(num_t.value) if '.' in num_t.value else int(num_t.value)
+                    array_values.append(num_val)
+                else:
+                    raise ValueError(f"Unexpected token in array: {elem_t}")
+
+                t = self._peek()
+                if t and t.type == 'PUNC' and t.value == ',':
+                    self._eat('PUNC', ',')
+                    continue
+                break
+
+            self._eat('PUNC', ']')
+            return array_values
+
+        # Handle negative/positive numbers outside arrays
+        if t and t.type == 'OP' and t.value in ('+', '-'):
+            sign = self._eat('OP').value
+            num_t = self._eat('NUMBER')
+            num_val = float(num_t.value) if '.' in num_t.value else int(num_t.value)
+            if sign == '-':
+                num_val = -num_val
+            return num_val
+
+        # Original value parsing
         t = self._eat()
         if t.type == 'NUMBER':
-            # Return as int if possible, else float
-            return int(t.value) if t.value.isdigit() or (t.value.startswith('-') and t.value[1:].isdigit()) else float(t.value)
+            return int(t.value) if t.value.isdigit() else float(t.value)
         if t.type == 'STRING':
             return t.value
         if t.type == 'IDENT':
-            # identifiers as strings for now
             return t.value
         raise ValueError(f"Unexpected value token {t}")

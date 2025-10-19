@@ -36,6 +36,11 @@ class SQLTokenizer:
                 tokens.append(Token("PUNC", ch))
                 i += 1
                 continue
+            # ← AGREGAR ESTA SECCIÓN PARA OPERADORES +, -, <, >
+            if ch in "+-":
+                tokens.append(Token("OP", ch))
+                i += 1
+                continue
             if ch in "<>":
                 # simple operators: <, >, <=, >=, <>
                 if i + 1 < N and s[i+1] in "=>":

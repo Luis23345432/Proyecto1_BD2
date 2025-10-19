@@ -44,7 +44,28 @@ class QueryExecutor:
         table = self.db.get_table(stmt.table)
         if table is None:
             raise ValueError("Tabla no existe")
-        rid = table.insert(stmt.values)
+
+        # Handle positional values
+        if "__positional__" in stmt.values:
+            positional = stmt.values["__positional__"]
+            column_names = [col.name for col in table.schema.columns]
+
+            if len(positional) > len(column_names):
+                raise ValueError(f"Too many values: expected {len(column_names)}, got {len(positional)}")
+
+            mapped_values = {}
+            for i, value in enumerate(positional):
+                mapped_values[column_names[i]] = value
+
+            # ← AGREGAR ESTE DEBUG
+            print(f"DEBUG mapped_values: {mapped_values}")
+            print(f"DEBUG ubicacion type: {type(mapped_values.get('ubicacion'))}")
+            print(f"DEBUG ubicacion value: {mapped_values.get('ubicacion')}")
+
+            rid = table.insert(mapped_values)
+        else:
+            rid = table.insert(stmt.values)
+
         return {"ok": True, "rid": rid}
 
     def execute_delete(self, plan: Plan, stmt: DeleteStmt) -> Dict[str, Any]:
@@ -119,6 +140,8 @@ class QueryExecutor:
         if t == 'VARCHAR':
             return ColumnType.VARCHAR
         if t == 'ARRAY' and (c.inner_type or '').upper() == 'FLOAT':
+            return ColumnType.ARRAY_FLOAT
+        if t == 'ARRAY_FLOAT':  # ← AGREGAR ESTA LÍNEA
             return ColumnType.ARRAY_FLOAT
         # fallback
         return ColumnType.VARCHAR

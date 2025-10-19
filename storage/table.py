@@ -95,8 +95,28 @@ class Table:
     def insert(self, values: Dict[str, Any]) -> Tuple[int, int]:
         stats.inc("table.insert.calls")
         with stats.timer("table.insert.time"):
+            print(f"1. DEBUG values recibidos: {values}")
+            print(f"1. DEBUG ubicacion tipo: {type(values.get('ubicacion'))}")
+
+            # ← AGREGAR ESTO
+            print(f"DEBUG schema.columns:")
+            for col in self.schema.columns:
+                print(f"  - {col.name}: type={col.col_type}, length={col.length}")
+
             rec = Record(self.schema, values)
-            rid = self.datafile.insert_clustered(rec.to_dict())  # (page_id, slot)
+
+            print(f"2. DEBUG rec.values: {rec.values}")
+            print(f"2. DEBUG ubicacion tipo después Record: {type(rec.values.get('ubicacion'))}")
+
+            rec_dict = rec.to_dict()
+
+            print(f"3. DEBUG rec.to_dict(): {rec_dict}")
+            print(f"3. DEBUG ubicacion tipo después to_dict: {type(rec_dict.get('ubicacion'))}")
+
+            rid = self.datafile.insert_clustered(rec_dict)
+
+            print(f"4. DEBUG después de insert_clustered, rid: {rid}")
+
             # actualizar índices
             for col in self.schema.columns:
                 if col.name in self.indexes:
@@ -104,6 +124,9 @@ class Table:
                     if key is None:
                         continue
                     tree = self.indexes[col.name]
+
+                    print(f"5. DEBUG indexando {col.name}, key: {key}, tipo: {type(key)}")
+
                     # Para RTree, la clave debe ser un punto [x,y,(z)]
                     try:
                         if isinstance(tree, RTreeIndex):
@@ -113,15 +136,17 @@ class Table:
                                 if isinstance(key, str):
                                     parts = [p.strip() for p in key.split(',')]
                                     key = [float(p) for p in parts]
+
+                            print(f"6. DEBUG antes de tree.add, key: {key}, tipo: {type(key)}")
                             tree.add(key, rid)
                         else:
                             tree.add(key, rid)
-                    except Exception:
+                    except Exception as e:
+                        print(f"ERROR en tree.add: {e}")
                         # si falla, no rompemos la inserción de la tabla
                         tree.add(key, rid)
             self._save_indexes()
             return rid
-
     def _pick_index(self, column: str) -> Optional[BPlusTree]:
         return self.indexes.get(column)
 

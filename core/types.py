@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Any, List, Optional
 from datetime import datetime
+import json
 
 
 class ColumnType(Enum):
@@ -68,16 +69,39 @@ def _to_varchar(v: Any, max_len: Optional[int]) -> str:
 
 
 def _to_array_float(v: Any) -> List[float]:
+    """Convierte a lista de floats preservando el tipo list"""
+    # CRÍTICO: NO llamar a str() si ya es lista
     if v is None:
         return []
+
+    # Si ya es lista o tupla, convertir elementos a float
     if isinstance(v, (list, tuple)):
-        return [_to_float(x) for x in v]
-    # si viene como string "1,2,3"
-    s = str(v).strip()
-    if not s:
-        return []
-    parts = [p.strip() for p in s.split(',')]
-    return [_to_float(p) for p in parts]
+        result = [float(x) for x in v]
+        print(f"DEBUG _to_array_float: recibió lista, retornando: {result}, tipo: {type(result)}")
+        return result
+
+    # Si es string, intentar parsearlo
+    if isinstance(v, str):
+        s = v.strip()
+        if not s:
+            return []
+
+        # Caso 1: String JSON "[1.0, 2.0]"
+        if s.startswith('[') and s.endswith(']'):
+            try:
+                parsed = json.loads(s)
+                if isinstance(parsed, (list, tuple)):
+                    return [float(x) for x in parsed]
+            except:
+                pass
+
+        # Caso 2: String separado por comas "1.0, 2.0"
+        parts = [p.strip() for p in s.split(',')]
+        return [float(p) for p in parts if p]
+
+    # Fallback: retornar vacío
+    print(f"WARNING _to_array_float: tipo inesperado {type(v)}, valor: {v}")
+    return []
 
 
 def convert_value(col_type: ColumnType, value: Any, *, max_len: Optional[int] = None) -> Any:
@@ -91,5 +115,7 @@ def convert_value(col_type: ColumnType, value: Any, *, max_len: Optional[int] = 
     if col_type == ColumnType.VARCHAR:
         return _to_varchar(value, max_len)
     if col_type == ColumnType.ARRAY_FLOAT:
-        return _to_array_float(value)
+        result = _to_array_float(value)
+        print(f"DEBUG convert_value ARRAY_FLOAT: entrada={value} (tipo={type(value)}), salida={result} (tipo={type(result)})")
+        return result
     return value
