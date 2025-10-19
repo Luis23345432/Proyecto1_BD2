@@ -37,6 +37,8 @@ class SelectStmt:
     table: str
     columns: List[str]  # ['*'] for all
     condition: Optional[Condition] = None
+    # Spatial extras (mutually exclusive with condition for simplicity)
+    spatial: Optional[Dict[str, Any]] = None  # { kind: 'NEAR'|'KNN', column: str, center: [lat,lon], radius?: float, k?: int }
 
 
 @dataclass

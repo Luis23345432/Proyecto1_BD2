@@ -4,8 +4,8 @@ uvicorn[standard]==0.30.6
 pydantic==2.9.2
 
 # Autenticación y Seguridad
-passlib[bcrypt]>=1.7.4
-bcrypt>=3.2.2
+passlib[bcrypt]==1.7.4
+bcrypt==3.2.2
 python-jose[cryptography]==3.3.0
 python-multipart==0.0.9
 
@@ -17,3 +17,4 @@ matplotlib==3.9.2
 
 # Utilidades`
 python-dateutil==2.9.0
+
