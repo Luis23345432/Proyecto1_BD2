@@ -1,0 +1,101 @@
+id,nombre,categoria,latitud,longitud,calificacion,precio_promedio
+1,Restaurante 1,Fast Food,-12.067862,-77.085393,4.5,34
+2,Restaurante 2,Vegetariana,-12.013354,-77.020117,4.5,127
+3,Restaurante 3,Italiana,-12.040276,-77.067143,3.4,57
+4,Restaurante 4,Mexicana,-12.048344,-77.015327,4.3,116
+5,Restaurante 5,Italiana,-11.997094,-77.082876,5.0,138
+6,Restaurante 6,Vegetariana,-12.09287,-77.035814,4.1,61
+7,Restaurante 7,Italiana,-12.054881,-77.01056,3.9,64
+8,Restaurante 8,Fast Food,-12.039734,-77.015197,4.5,60
+9,Restaurante 9,Mexicana,-12.012736,-77.089059,5.0,27
+10,Restaurante 10,Peruana,-12.046645,-77.053913,4.9,132
+11,Restaurante 11,Vegetariana,-12.036044,-77.020421,4.9,104
+12,Restaurante 12,Italiana,-12.009689,-77.078851,3.8,114
+13,Restaurante 13,Japonesa,-12.056649,-77.021077,3.0,62
+14,Restaurante 14,Peruana,-12.093521,-77.023283,3.5,45
+15,Restaurante 15,Vegetariana,-11.997234,-77.008706,3.1,77
+16,Restaurante 16,Mariscos,-12.036563,-77.05906,3.6,89
+17,Restaurante 17,Mariscos,-12.028913,-77.041007,4.8,22
+18,Restaurante 18,Parrillas,-12.004534,-77.024104,3.1,127
+19,Restaurante 19,Mexicana,-12.089816,-77.075098,3.8,93
+20,Restaurante 20,Italiana,-12.072365,-77.041282,4.3,77
+21,Restaurante 21,Postres,-12.006351,-77.019736,3.4,146
+22,Restaurante 22,Vegetariana,-12.065559,-77.071151,3.2,121
+23,Restaurante 23,Japonesa,-12.062162,-77.044207,4.6,102
+24,Restaurante 24,Vegetariana,-12.051974,-77.029434,4.4,78
+25,Restaurante 25,Mariscos,-12.041659,-77.049352,3.7,142
+26,Restaurante 26,Mariscos,-12.013383,-77.056618,3.4,35
+27,Restaurante 27,Italiana,-12.053262,-77.059036,4.9,65
+28,Restaurante 28,Vegetariana,-12.082395,-77.01396,4.1,92
+29,Restaurante 29,China,-12.057519,-77.018727,3.4,128
+30,Restaurante 30,China,-12.07449,-77.002846,4.2,123
+31,Restaurante 31,Peruana,-12.023254,-77.050293,4.8,57
+32,Restaurante 32,Peruana,-12.019152,-77.031715,4.4,32
+33,Restaurante 33,Fast Food,-12.085847,-77.065117,3.9,132
+34,Restaurante 34,Peruana,-12.083239,-77.087398,4.0,126
+35,Restaurante 35,Japonesa,-12.034525,-77.064118,3.9,47
+36,Restaurante 36,Peruana,-12.051755,-77.013422,3.7,80
+37,Restaurante 37,Peruana,-12.057143,-77.031684,3.7,24
+38,Restaurante 38,Mexicana,-12.082305,-77.091977,4.5,65
+39,Restaurante 39,Vegetariana,-12.064645,-77.020567,4.1,66
+40,Restaurante 40,Italiana,-11.998358,-77.091813,4.4,133
+41,Restaurante 41,Mexicana,-12.057575,-77.075761,3.1,70
+42,Restaurante 42,China,-12.010553,-77.039628,4.1,50
+43,Restaurante 43,Peruana,-12.068639,-77.010617,4.4,84
+44,Restaurante 44,Peruana,-12.001962,-77.008169,3.0,33
+45,Restaurante 45,Mexicana,-12.054399,-77.006534,4.4,102
+46,Restaurante 46,Fast Food,-12.016761,-77.081576,4.6,97
+47,Restaurante 47,Peruana,-12.065943,-77.077519,3.4,64
+48,Restaurante 48,Fast Food,-12.063266,-77.042151,4.6,115
+49,Restaurante 49,Peruana,-12.050656,-77.017065,4.4,49
+50,Restaurante 50,Vegetariana,-12.060057,-77.08918,3.2,59
+51,Restaurante 51,Mariscos,-12.075628,-77.047097,3.1,27
+52,Restaurante 52,Vegetariana,-12.005943,-77.000188,3.1,124
+53,Restaurante 53,Peruana,-12.044295,-77.032628,3.4,64
+54,Restaurante 54,Vegetariana,-12.06515,-77.060009,4.7,58
+55,Restaurante 55,China,-12.031091,-77.010362,4.5,84
+56,Restaurante 56,Peruana,-12.049763,-77.015592,3.9,82
+57,Restaurante 57,Peruana,-12.045836,-77.049628,4.3,134
+58,Restaurante 58,Peruana,-12.08788,-77.001528,3.9,26
+59,Restaurante 59,Fast Food,-12.045478,-77.079428,4.3,71
+60,Restaurante 60,Peruana,-12.016986,-77.026968,3.2,117
+61,Restaurante 61,Mexicana,-12.077859,-76.994159,4.5,83
+62,Restaurante 62,Parrillas,-12.028716,-77.032736,3.8,39
+63,Restaurante 63,Fast Food,-12.022798,-77.017208,4.9,146
+64,Restaurante 64,Peruana,-12.041192,-77.08633,3.6,58
+65,Restaurante 65,Japonesa,-12.021749,-77.066569,3.2,122
+66,Restaurante 66,China,-12.000598,-77.03615,3.3,99
+67,Restaurante 67,Italiana,-12.042318,-77.065153,3.9,150
+68,Restaurante 68,Vegetariana,-12.02218,-77.085188,4.2,78
+69,Restaurante 69,Parrillas,-12.073005,-77.058247,3.4,77
+70,Restaurante 70,Parrillas,-12.041202,-77.092105,4.3,26
+71,Restaurante 71,Mariscos,-12.033089,-76.995416,4.2,60
+72,Restaurante 72,Italiana,-12.054308,-77.07366,4.1,45
+73,Restaurante 73,Fast Food,-12.054429,-77.005212,4.2,90
+74,Restaurante 74,Peruana,-12.060481,-77.07588,4.7,95
+75,Restaurante 75,Mexicana,-12.005884,-77.019367,4.1,48
+76,Restaurante 76,China,-12.003777,-77.020674,4.4,149
+77,Restaurante 77,Italiana,-12.080337,-77.022688,5.0,90
+78,Restaurante 78,Japonesa,-12.078016,-77.079234,3.7,109
+79,Restaurante 79,Mexicana,-12.037201,-77.058664,4.7,103
+80,Restaurante 80,Vegetariana,-12.09041,-77.089743,3.4,140
+81,Restaurante 81,Parrillas,-12.050727,-77.074224,4.3,31
+82,Restaurante 82,Japonesa,-12.040741,-77.026233,4.3,101
+83,Restaurante 83,Postres,-12.090852,-76.996545,3.8,88
+84,Restaurante 84,China,-12.069376,-77.064041,4.4,93
+85,Restaurante 85,Parrillas,-12.063446,-77.001563,4.5,68
+86,Restaurante 86,Japonesa,-11.996747,-77.072528,4.6,90
+87,Restaurante 87,Japonesa,-12.019478,-77.076463,4.4,133
+88,Restaurante 88,Japonesa,-12.007105,-77.02292,3.8,76
+89,Restaurante 89,Vegetariana,-12.071997,-77.071375,4.1,132
+90,Restaurante 90,China,-12.086348,-77.012657,4.3,28
+91,Restaurante 91,Postres,-12.058866,-77.019577,4.4,124
+92,Restaurante 92,Vegetariana,-12.076312,-77.085073,3.6,147
+93,Restaurante 93,Parrillas,-12.043264,-77.071724,4.5,38
+94,Restaurante 94,Postres,-12.007643,-77.011526,4.0,49
+95,Restaurante 95,Postres,-12.02595,-77.09,4.6,57
+96,Restaurante 96,Peruana,-12.027964,-77.034876,3.5,141
+97,Restaurante 97,China,-12.018575,-77.034581,3.2,74
+98,Restaurante 98,Italiana,-12.006587,-77.016019,4.2,48
+99,Restaurante 99,Japonesa,-12.08741,-77.077388,3.1,72
+100,Restaurante 100,Fast Food,-12.086949,-77.069155,4.0,116
