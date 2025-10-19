@@ -2,9 +2,6 @@
 RTreeWrapper.py
 Interface unificada del R-Tree para integración con el SQL Parser.
 
-Este archivo es el que usarán para integrar el R-Tree
-con el parser SQL y el resto del sistema.
-
 """
 
 from typing import List, Dict, Any, Tuple, Optional
@@ -16,19 +13,19 @@ class RTreeWrapper:
     Wrapper del R-Tree que proporciona una interface simple y uniforme
     para ser utilizada por el parser SQL y otros componentes del sistema.
     
-    USO:
-    ------------------------
+    IMPORTANTE: Coordenadas en orden [longitud, latitud] o [x, y]
+  
     from RTreeWrapper import RTreeWrapper
     
-    # Crear índice
+    # Crear índice (longitud, latitud)
     rtree = RTreeWrapper(table_name="Restaurantes", dimensions=2)
     
-    # Cargar desde CSV
-    rtree.create_from_csv("restaurantes.csv", ["latitud", "longitud"])
+    # Cargar desde CSV (columnas: longitud, latitud)
+    rtree.create_from_csv("restaurantes.csv", ["longitud", "latitud"])
     
-    # Búsquedas (desde el parser)
-    results = rtree.search_range([10.5, 20.3], 2.0)
-    results = rtree.search_knn([10.5, 20.3], 5)
+    # Búsquedas (longitud, latitud)
+    results = rtree.search_range([-77.0428, -12.0464], 0.5)  # Lima
+    results = rtree.search_knn([-77.0428, -12.0464], 5)
     """
     
     def __init__(self, table_name: str, dimensions: int = 2):
@@ -54,55 +51,37 @@ class RTreeWrapper:
         """
         Crea el índice desde un archivo CSV.
         
+        Esta es la ÚNICA forma de cargar datos al R-Tree.
+        Se hace una vez al crear la tabla.
+        
+        IMPORTANTE: Las columnas deben estar en orden [longitud, latitud] o [x, y]
+        
         Ejemplo SQL:
         CREATE TABLE Restaurantes FROM FILE "restaurantes.csv" 
-        USING INDEX rtree("latitud", "longitud")
+        USING INDEX rtree("longitud", "latitud")
         
         Args:
             csv_file: Ruta del archivo CSV
             coordinate_columns: Nombres de columnas con coordenadas
+                               Orden: [longitud, latitud] o [x, y]
             
         Returns:
             Número de registros indexados
         """
         count = self.index.load_from_csv(csv_file, coordinate_columns)
         print(f"✓ Índice R-Tree creado: {count} registros indexados")
+        print(f"  Convención: POINT({coordinate_columns[0]}, {coordinate_columns[1]})")
         return count
     
-    def insert(self, coordinates: List[float], record: Dict[str, Any]) -> int:
-        """
-        Inserta un nuevo registro.
-        
-        Ejemplo SQL:
-        INSERT INTO Restaurantes VALUES (11, 'Nuevo', ARRAY[-12.05, -77.04])
-        
-        Args:
-            coordinates: Coordenadas del punto
-            record: Registro completo (diccionario)
-            
-        Returns:
-            ID asignado al punto
-        """
-        return self.index.add(coordinates, record)
-    
-    def delete(self, point_id: int) -> bool:
-        """
-        Elimina un registro por su ID.
-        
-        Ejemplo SQL:
-        DELETE FROM Restaurantes WHERE id = 5
-        
-        Args:
-            point_id: ID del punto a eliminar
-            
-        Returns:
-            True si se eliminó, False si no existe
-        """
-        return self.index.remove(point_id)
+    # =========================================================================
+    # MÉTODOS DE BÚSQUEDA (operaciones principales del R-Tree)
+    # =========================================================================
     
     def search_range(self, center: List[float], radius: float) -> List[Dict]:
         """
         Búsqueda por rango (rangeSearch).
+        
+        OPERACIÓN REQUERIDA EN EL PROYECTO.
         
         Ejemplo SQL:
         SELECT * FROM Restaurantes 
@@ -113,13 +92,15 @@ class RTreeWrapper:
             radius: Radio de búsqueda
             
         Returns:
-            Lista de registros dentro del rango
+            Lista de registros dentro del rango, ordenados por distancia
         """
         return self.index.rangeSearch(center, radius)
     
     def search_knn(self, center: List[float], k: int) -> List[Dict]:
         """
         Búsqueda K-NN (K vecinos más cercanos).
+        
+        OPERACIÓN REQUERIDA EN EL PROYECTO.
         
         Ejemplo SQL:
         SELECT * FROM Restaurantes 
@@ -130,7 +111,7 @@ class RTreeWrapper:
             k: Número de vecinos
             
         Returns:
-            Lista de k registros más cercanos
+            Lista de k registros más cercanos, ordenados por distancia
         """
         return self.index.kNN(center, k)
     
@@ -138,6 +119,8 @@ class RTreeWrapper:
                     tolerance: float = 0.0001) -> List[Dict]:
         """
         Búsqueda exacta por coordenadas (con tolerancia).
+        
+        Útil para verificar si existe un punto en una ubicación específica.
         
         Ejemplo SQL:
         SELECT * FROM Restaurantes 
@@ -148,7 +131,7 @@ class RTreeWrapper:
             tolerance: Tolerancia para considerar igualdad
             
         Returns:
-            Lista de registros en esa ubicación
+            Lista de registros en esa ubicación (normalmente 0 o 1)
         """
         return self.index.rangeSearch(coordinates, radius=tolerance)
     
@@ -222,7 +205,6 @@ class RTreeWrapper:
                 f"dimensions={self.dimensions}, "
                 f"records={len(self.index)})")
 
-
 # =============================================================================
 # EJEMPLO DE USO PARA EL PARSER SQL
 # =============================================================================
@@ -292,7 +274,6 @@ class SQLParserExample:
         rtree = self.tables[table_name]
         return rtree.delete(point_id)
 
-
 if __name__ == "__main__":
     print("=" * 80)
     print("EJEMPLO DE USO DEL RTREEWRAPPER PARA EL PARSER")
@@ -352,4 +333,4 @@ if __name__ == "__main__":
     
     # Limpiar
     rtree.clear()
-    print("\n✓ Wrapper funcionando correctamente")
+    print("\n Wrapper funcionando correctamente")

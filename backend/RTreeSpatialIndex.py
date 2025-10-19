@@ -223,7 +223,7 @@ class RTreeSpatialIndex:
                 f"Centro debe tener {self.dimensions} dimensiones"
             )
         
-        # Crear punto de consulta
+    
         if self.dimensions == 2:
             x, y = center
             query_point = (x, y, x, y)
