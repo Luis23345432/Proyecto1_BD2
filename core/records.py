@@ -7,8 +7,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict
 
-from .schema import TableSchema
-from .types import ColumnType, convert_value
+from core.schema import TableSchema
+from core.types import ColumnType, convert_value
 
 
 @dataclass

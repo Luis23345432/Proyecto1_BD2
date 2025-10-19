@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional
 import json
 import os
 
-from .types import ColumnType, IndexType
+from core.types import ColumnType, IndexType
 
 
 @dataclass

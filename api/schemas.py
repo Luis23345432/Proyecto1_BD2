@@ -4,15 +4,30 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 
-# Users
+# ==========================================
+# AUTENTICACIÓN (NUEVO)
+# ==========================================
+
 class UserCreate(BaseModel):
-    user_id: str = Field(..., min_length=1)
+    username: str = Field(..., min_length=3, max_length=50)
+    password: str = Field(..., min_length=6)
+
+class UserLogin(BaseModel):
+    username: str
+    password: str
 
 class User(BaseModel):
-    user_id: str
+    username: str
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
 
 
-# Databases
+# ==========================================
+# DATABASES
+# ==========================================
+
 class DatabaseCreate(BaseModel):
     name: str = Field(..., min_length=1)
 
@@ -20,7 +35,10 @@ class DatabaseOut(BaseModel):
     name: str
 
 
-# Tables
+# ==========================================
+# TABLES
+# ==========================================
+
 class IndexDecl(BaseModel):
     type: str
     column: str
@@ -42,7 +60,10 @@ class TableStatsOut(BaseModel):
     indexes: Dict[str, Any]
 
 
-# Records
+# ==========================================
+# RECORDS
+# ==========================================
+
 class RecordInsert(BaseModel):
     values: Dict[str, Any]
 
@@ -51,7 +72,10 @@ class RecordsQuery(BaseModel):
     offset: Optional[int] = 0
 
 
-# Spatial queries (RTree)
+# ==========================================
+# SPATIAL QUERIES (RTree)
+# ==========================================
+
 class SpatialRange(BaseModel):
     column: str
     center: List[float]
@@ -63,11 +87,17 @@ class SpatialKNN(BaseModel):
     k: int
 
 
+# ==========================================
 # SQL
+# ==========================================
+
 class SQLQuery(BaseModel):
     sql: str
 
 
-# CSV load
+# ==========================================
+# CSV LOAD
+# ==========================================
+
 class CSVLoad(BaseModel):
     path: Optional[str] = None  # for local path ingestion (optional)
