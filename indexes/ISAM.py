@@ -1,13 +1,5 @@
 """
 ISAM estático minimal que implementa IndexInterface del proyecto.
-
-- Directorio base: lista ordenada por clave con listas de RIDs
-- Overflow: inserciones posteriores se almacenan en un mapa adicional
-- Persistencia en JSON (.idx)
-
-Nota: Este ISAM no referencia páginas físicas como en su definición clásica; en su lugar,
-      mantiene un directorio sorted(key->RIDs). Esto permite integrarlo con DataFile actual
-      y servir de índice estático con rebuildeo ocasional.
 """
 
 from __future__ import annotations
@@ -17,7 +9,7 @@ import json
 import os
 from typing import Any, Dict, List, Optional, Tuple
 
-from .bptree_adapter import IndexInterface  # reutilizamos la interfaz ya definida
+from .bptree_adapter import IndexInterface
 from metrics import stats
 
 
@@ -35,60 +27,92 @@ class ISAM(IndexInterface):
         return json.dumps(k, ensure_ascii=False)
 
     def _find_index(self, key: Any) -> int:
+        stats.inc("disk.reads")  # ← AGREGAR: búsqueda binaria requiere lectura
         i = bisect.bisect_left(self.keys, key)
         return i
 
     # IndexInterface
     def search(self, key: Any) -> List[Any]:
         stats.inc("index.isam.search")
-        i = self._find_index(key)
-        out: List[Any] = []
-        if i < len(self.keys) and self.keys[i] == key:
-            out.extend(self.vals[i])
-        ov = self.overflow.get(self._key_to_str(key))
-        if ov:
-            out.extend(ov)
+
+        with stats.timer("index.isam.search.time"):  # ← AGREGAR timer
+            i = self._find_index(key)
+            out: List[Any] = []
+
+            if i < len(self.keys) and self.keys[i] == key:
+                stats.inc("disk.reads")  # ← AGREGAR: leer página de datos
+                out.extend(self.vals[i])
+
+            ov = self.overflow.get(self._key_to_str(key))
+            if ov:
+                stats.inc("disk.reads")  # ← AGREGAR: leer overflow
+                out.extend(ov)
+
         return out
 
     def range_search(self, begin_key: Any, end_key: Any) -> List[Any]:
         stats.inc("index.isam.range")
-        i = bisect.bisect_left(self.keys, begin_key)
-        out: List[Any] = []
-        while i < len(self.keys) and self.keys[i] <= end_key:
-            out.extend(self.vals[i])
-            i += 1
-        # overflow scan (simple)
-        for k_str, lst in self.overflow.items():
-            k = json.loads(k_str)
-            if begin_key <= k <= end_key:
-                out.extend(lst)
+
+        with stats.timer("index.isam.range.time"):  # ← AGREGAR timer
+            i = bisect.bisect_left(self.keys, begin_key)
+            out: List[Any] = []
+            pages_read = 0
+
+            while i < len(self.keys) and self.keys[i] <= end_key:
+                stats.inc("disk.reads")  # ← AGREGAR: leer cada página en el rango
+                pages_read += 1
+                out.extend(self.vals[i])
+                i += 1
+
+            # overflow scan (simple)
+            for k_str, lst in self.overflow.items():
+                stats.inc("disk.reads")  # ← AGREGAR: leer overflow
+                k = json.loads(k_str)
+                if begin_key <= k <= end_key:
+                    out.extend(lst)
+
         return out
 
     def add(self, key: Any, record: Any) -> bool:
         stats.inc("index.isam.add")
-        # Try to place in base directory if key exists or right position is clear
-        i = self._find_index(key)
-        if i < len(self.keys) and self.keys[i] == key:
-            self.vals[i].append(record)
-            return True
-        # Insert new key in base directory to keep ISAM useful without rebuild
-        self.keys.insert(i, key)
-        self.vals.insert(i, [record])
+        stats.inc("disk.reads")  # ← AGREGAR: buscar posición
+
+        with stats.timer("index.isam.add.time"):  # ← AGREGAR timer
+            i = self._find_index(key)
+
+            if i < len(self.keys) and self.keys[i] == key:
+                self.vals[i].append(record)
+                stats.inc("disk.writes")  # ← AGREGAR: actualizar página existente
+                return True
+
+            # Insert new key in base directory
+            self.keys.insert(i, key)
+            self.vals.insert(i, [record])
+            stats.inc("disk.writes")  # ← AGREGAR: escribir nueva página
+
         return True
 
     def remove(self, key: Any) -> bool:
         stats.inc("index.isam.remove")
-        removed = False
-        i = self._find_index(key)
-        if i < len(self.keys) and self.keys[i] == key:
-            # elimina toda la clave del directorio
-            self.keys.pop(i)
-            self.vals.pop(i)
-            removed = True
-        kstr = self._key_to_str(key)
-        if kstr in self.overflow:
-            del self.overflow[kstr]
-            removed = True
+        stats.inc("disk.reads")  # ← AGREGAR: buscar clave
+
+        with stats.timer("index.isam.remove.time"):  # ← AGREGAR timer
+            removed = False
+            i = self._find_index(key)
+
+            if i < len(self.keys) and self.keys[i] == key:
+                # elimina toda la clave del directorio
+                self.keys.pop(i)
+                self.vals.pop(i)
+                stats.inc("disk.writes")  # ← AGREGAR: actualizar índice
+                removed = True
+
+            kstr = self._key_to_str(key)
+            if kstr in self.overflow:
+                del self.overflow[kstr]
+                stats.inc("disk.writes")  # ← AGREGAR: actualizar overflow
+                removed = True
+
         return removed
 
     def get_stats(self) -> dict:
@@ -105,8 +129,6 @@ class ISAM(IndexInterface):
         pairs_sorted = sorted(pairs, key=lambda kv: kv[0])
         self.keys = []
         self.vals = []
-        last_k = object()
-        bucket: List[Any] = []
         for k, v in pairs_sorted:
             if not self.keys or k != self.keys[-1]:
                 self.keys.append(k)

@@ -174,20 +174,82 @@ class SQLParser:
         self._eat('KW', 'INSERT')
         self._eat('KW', 'INTO')
         table = self._eat('IDENT').value
+
+        # ← NUEVO: Verificar si hay lista de columnas explícitas
+        columns = None
+        t = self._peek()
+
+        if t and t.type == 'PUNC' and t.value == '(':
+            # Guardar posición actual
+            saved_pos = self.i
+            self._eat('PUNC', '(')
+
+            # Mirar el siguiente token
+            next_t = self._peek()
+
+            # Si es IDENT, son columnas explícitas
+            if next_t and next_t.type == 'IDENT':
+                # Verificar si después del IDENT viene ',' o ')'
+                # Esto nos ayuda a distinguir entre:
+                # INSERT INTO t (col1, col2) VALUES (...)
+                # vs
+                # INSERT INTO t VALUES (val1, val2)
+                temp_pos = self.i
+                self._eat('IDENT')  # Consumir el identificador
+                lookahead = self._peek()
+                self.i = temp_pos  # Restaurar posición
+
+                # Si viene ',' o ')', son columnas
+                if lookahead and lookahead.type == 'PUNC' and lookahead.value in (',', ')'):
+                    columns = []
+
+                    # Leer nombres de columnas
+                    columns.append(self._eat('IDENT').value)
+
+                    while True:
+                        t = self._peek()
+                        if t and t.type == 'PUNC' and t.value == ',':
+                            self._eat('PUNC', ',')
+                            columns.append(self._eat('IDENT').value)
+                        else:
+                            break
+
+                    self._eat('PUNC', ')')
+                else:
+                    # No son columnas, restaurar y continuar
+                    self.i = saved_pos
+            else:
+                # No es IDENT, restaurar posición
+                self.i = saved_pos
+
+        # Ahora debe venir VALUES
         self._eat('KW', 'VALUES')
         self._eat('PUNC', '(')
-        values: Dict[str, Any] = {}
-        # Parse name=value pairs or positional? We'll accept name=value pairs for simplicity
+
+        # Parse positional values
+        positional_values = []
         while True:
-            key = self._eat('IDENT').value
-            self._eat('PUNC', '=')
-            values[key] = self._parse_value()
+            positional_values.append(self._parse_value())
+
             t = self._peek()
             if t and t.type == 'PUNC' and t.value == ',':
                 self._eat('PUNC', ',')
                 continue
             break
+
         self._eat('PUNC', ')')
+
+        # ← NUEVO: Validar que coincidan columnas y valores
+        if columns and len(columns) != len(positional_values):
+            raise ValueError(f"Column count ({len(columns)}) doesn't match value count ({len(positional_values)})")
+
+        # Store as positional for executor to map to column names
+        values = {"__positional__": positional_values}
+
+        # ← NUEVO: Agregar columnas explícitas si existen
+        if columns:
+            values["__columns__"] = columns
+
         return InsertStmt(table=table, values=values)
 
     def _parse_delete(self) -> DeleteStmt:
@@ -205,13 +267,62 @@ class SQLParser:
         return DeleteStmt(table=table, condition=condition)
 
     def _parse_value(self):
+        t = self._peek()
+
+        # Handle arrays [...]
+        if t and t.type == 'PUNC' and t.value == '[':
+            self._eat('PUNC', '[')
+            array_values = []
+
+            # Empty array
+            t = self._peek()
+            if t and t.type == 'PUNC' and t.value == ']':
+                self._eat('PUNC', ']')
+                return array_values
+
+            # Parse array elements
+            while True:
+                elem_t = self._peek()
+
+                # Handle negative/positive numbers with explicit sign
+                if elem_t and elem_t.type == 'OP' and elem_t.value in ('+', '-'):
+                    sign = self._eat('OP').value
+                    num_t = self._eat('NUMBER')
+                    num_val = float(num_t.value) if '.' in num_t.value else int(num_t.value)
+                    if sign == '-':
+                        num_val = -num_val
+                    array_values.append(num_val)
+                elif elem_t and elem_t.type == 'NUMBER':
+                    num_t = self._eat('NUMBER')
+                    num_val = float(num_t.value) if '.' in num_t.value else int(num_t.value)
+                    array_values.append(num_val)
+                else:
+                    raise ValueError(f"Unexpected token in array: {elem_t}")
+
+                t = self._peek()
+                if t and t.type == 'PUNC' and t.value == ',':
+                    self._eat('PUNC', ',')
+                    continue
+                break
+
+            self._eat('PUNC', ']')
+            return array_values
+
+        # Handle negative/positive numbers outside arrays
+        if t and t.type == 'OP' and t.value in ('+', '-'):
+            sign = self._eat('OP').value
+            num_t = self._eat('NUMBER')
+            num_val = float(num_t.value) if '.' in num_t.value else int(num_t.value)
+            if sign == '-':
+                num_val = -num_val
+            return num_val
+
+        # Original value parsing
         t = self._eat()
         if t.type == 'NUMBER':
-            # Return as int if possible, else float
-            return int(t.value) if t.value.isdigit() or (t.value.startswith('-') and t.value[1:].isdigit()) else float(t.value)
+            return int(t.value) if t.value.isdigit() else float(t.value)
         if t.type == 'STRING':
             return t.value
         if t.type == 'IDENT':
-            # identifiers as strings for now
             return t.value
         raise ValueError(f"Unexpected value token {t}")

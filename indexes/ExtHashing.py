@@ -35,12 +35,7 @@ class _Bucket:
 
 
 class ExtHashing(IndexInterface):
-    """Extendible Hashing implementing IndexInterface with JSON persistence.
-
-    Notes:
-    - range_search is not supported for hashing; returns empty list.
-    - No bucket merge on delete (simplified).
-    """
+    """Extendible Hashing implementing IndexInterface with JSON persistence."""
 
     def __init__(self, is_clustered: bool = False, global_depth: int = 2, bucket_capacity: int = 8):
         self.is_clustered = is_clustered
@@ -55,7 +50,7 @@ class ExtHashing(IndexInterface):
     # initialization helpers
     def _init_empty(self) -> None:
         self.buckets = []
-        # create 2^D buckets initially (sharing allowed is acceptable, but we keep unique for simplicity)
+        # create 2^D buckets initially
         num = 1 << self.global_depth
         for _ in range(num):
             self.buckets.append(_Bucket(local_depth=self.global_depth, capacity=self.bucket_capacity))
@@ -74,8 +69,13 @@ class ExtHashing(IndexInterface):
     # IndexInterface
     def search(self, key: Any) -> List[Any]:
         stats.inc("index.hash.search")
-        bidx = self._bucket_index_for(key)
-        return self.buckets[bidx].search(key)
+        stats.inc("disk.reads")  # ← AGREGAR: leer bucket del directorio
+
+        with stats.timer("index.hash.search.time"):  # ← AGREGAR timer
+            bidx = self._bucket_index_for(key)
+            result = self.buckets[bidx].search(key)
+
+        return result
 
     def range_search(self, begin_key: Any, end_key: Any) -> List[Any]:
         stats.inc("index.hash.range")
@@ -84,22 +84,39 @@ class ExtHashing(IndexInterface):
 
     def add(self, key: Any, record: Any) -> bool:
         stats.inc("index.hash.add")
-        bidx = self._bucket_index_for(key)
-        bucket = self.buckets[bidx]
-        if not bucket.is_full() or key in bucket.map:
-            bucket.add(key, record)
-            return True
-        # split if full and no room
-        self._split_bucket(bidx)
-        # retry insert
-        bidx2 = self._bucket_index_for(key)
-        self.buckets[bidx2].add(key, record)
+        stats.inc("disk.reads")  # ← AGREGAR: leer bucket
+
+        with stats.timer("index.hash.add.time"):  # ← AGREGAR timer
+            bidx = self._bucket_index_for(key)
+            bucket = self.buckets[bidx]
+
+            if not bucket.is_full() or key in bucket.map:
+                bucket.add(key, record)
+                stats.inc("disk.writes")  # ← AGREGAR: escribir bucket
+                return True
+
+            # split if full and no room
+            self._split_bucket(bidx)
+
+            # retry insert
+            bidx2 = self._bucket_index_for(key)
+            self.buckets[bidx2].add(key, record)
+            stats.inc("disk.writes")  # ← AGREGAR: escribir después de split
+
         return True
 
     def remove(self, key: Any) -> bool:
         stats.inc("index.hash.remove")
-        bidx = self._bucket_index_for(key)
-        return self.buckets[bidx].remove(key)
+        stats.inc("disk.reads")  # ← AGREGAR: leer bucket
+
+        with stats.timer("index.hash.remove.time"):  # ← AGREGAR timer
+            bidx = self._bucket_index_for(key)
+            result = self.buckets[bidx].remove(key)
+
+            if result:
+                stats.inc("disk.writes")  # ← AGREGAR: escribir cambios
+
+        return result
 
     def get_stats(self) -> dict:
         return {
@@ -112,9 +129,12 @@ class ExtHashing(IndexInterface):
 
     # splitting / directory doubling
     def _split_bucket(self, bidx: int) -> None:
+        stats.inc("disk.writes", 2)  # ← AGREGAR: split implica 2 escrituras (bucket viejo + nuevo)
+
         bucket = self.buckets[bidx]
         if bucket.local_depth == self.global_depth:
             self._double_directory()
+
         # create new bucket
         new_depth = bucket.local_depth + 1
         bucket.local_depth = new_depth
@@ -122,7 +142,7 @@ class ExtHashing(IndexInterface):
         self.buckets.append(new_bucket)
         new_idx = len(self.buckets) - 1
 
-        # rewire directory entries pointing to old bucket based on new bit
+        # rewire directory entries
         bit = 1 << (new_depth - 1)
         for i, idx in enumerate(self.directory):
             if idx == bidx:
@@ -135,30 +155,20 @@ class ExtHashing(IndexInterface):
             for v in vs:
                 items.append((k, v))
         bucket.map.clear()
+
         for k, v in items:
+            stats.inc("disk.reads")  # ← AGREGAR: leer durante redistribución
             idx = self._bucket_index_for(k)
             self.buckets[idx].add(k, v)
 
     def _double_directory(self) -> None:
+        stats.inc("disk.writes")  # ← AGREGAR: duplicar directorio requiere escritura
         old_dir = self.directory
         self.global_depth += 1
         self.directory = old_dir + old_dir[:]
 
     # persistence (JSON)
     def save_idx(self, path: str) -> None:
-        blob = {
-            "meta": {
-                "type": "HASH",
-                "clustered": self.is_clustered,
-                "global_depth": self.global_depth,
-                "bucket_capacity": self.bucket_capacity,
-            },
-            "buckets": [
-                {"local_depth": b.local_depth, "map": {json.dumps(k, ensure_ascii=False): v} if False else {
-                    # expand properly
-                }} for b in []
-            ]
-        }
         # Properly encode bucket maps
         b_arr = []
         for b in self.buckets:
@@ -166,8 +176,18 @@ class ExtHashing(IndexInterface):
             for k, vs in b.map.items():
                 enc_map[json.dumps(k, ensure_ascii=False)] = vs
             b_arr.append({"local_depth": b.local_depth, "map": enc_map})
-        blob["buckets"] = b_arr
-        blob["directory"] = list(self.directory)
+
+        blob = {
+            "meta": {
+                "type": "HASH",
+                "clustered": self.is_clustered,
+                "global_depth": self.global_depth,
+                "bucket_capacity": self.bucket_capacity,
+            },
+            "buckets": b_arr,
+            "directory": list(self.directory)
+        }
+
         with open(path, "w", encoding="utf-8") as f:
             json.dump(blob, f, ensure_ascii=False)
 
