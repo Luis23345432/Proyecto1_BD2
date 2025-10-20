@@ -132,112 +132,116 @@ class BPlusTree(IndexInterface):
     #OPERACIONES PRINCIPALES
 
     def search(self, key: Any) -> List[Any]:
-        """Busca todos los valores asociados a la clave.
-        - Clustered: devuelve lista de RIDs
-        - Unclustered: devuelve lista de payloads
-        """
+        """Busca todos los valores asociados a la clave."""
         stats.inc("index.btree.search")
-        self.search_count += 1
+        stats.inc("disk.reads")  # ← AGREGAR: Simular lectura de nodo raíz
 
-        if self.verbose:
-            print(f"\n>>> SEARCH key={key}")
+        with stats.timer("index.btree.search.time"):  # ← CAMBIAR: usar .time
+            self.search_count += 1
 
-        entry = self._find_entry(self.root, key)
-        if not entry:
             if self.verbose:
-                print(f"  Clave {key} no encontrada")
-            return []
+                print(f"\n>>> SEARCH key={key}")
 
-        results = list(entry.vals)
+            entry = self._find_entry(self.root, key)
+            if not entry:
+                if self.verbose:
+                    print(f"  Clave {key} no encontrada")
+                return []
 
-        if self.verbose:
-            print(f"  Encontrados {len(results)} registro(s)")
+            results = list(entry.vals)
 
-        return results
+            if self.verbose:
+                print(f"  Encontrados {len(results)} registro(s)")
+
+            return results
 
     def range_search(self, begin_key: Any, end_key: Any) -> List[Any]:
         """Busca todos los valores en el rango [begin_key, end_key]."""
         stats.inc("index.btree.range")
-        self.search_count += 1
+        stats.inc("disk.reads")  # ← AGREGAR
 
-        if self.verbose:
-            print(f"\n>>> RANGE SEARCH [{begin_key}, {end_key}]")
+        with stats.timer("index.btree.range.time"):  # ← CAMBIAR
+            self.search_count += 1
 
-        leaf = self._find_leaf(self.root, begin_key)
-        results = []
+            if self.verbose:
+                print(f"\n>>> RANGE SEARCH [{begin_key}, {end_key}]")
 
-        while leaf:
-            for i, key in enumerate(leaf.keys):
-                if begin_key <= key <= end_key:
-                    entry = leaf.children[i]
-                    results.extend(entry.vals)
-                elif key > end_key:
-                    if self.verbose:
-                        print(f"  Encontrados {len(results)} registros")
-                    return results
-            leaf = leaf.next
+            leaf = self._find_leaf(self.root, begin_key)
+            results = []
+            pages_read = 0  # ← AGREGAR: contador de páginas leídas
 
-        if self.verbose:
-            print(f"  Encontrados {len(results)} registros")
+            while leaf:
+                pages_read += 1
+                stats.inc("disk.reads")  # ← AGREGAR: Una lectura por cada hoja
 
-        return results
+                for i, key in enumerate(leaf.keys):
+                    if begin_key <= key <= end_key:
+                        entry = leaf.children[i]
+                        results.extend(entry.vals)
+                    elif key > end_key:
+                        if self.verbose:
+                            print(f"  Encontrados {len(results)} registros, {pages_read} páginas")
+                        return results
+                leaf = leaf.next
+
+            if self.verbose:
+                print(f"  Encontrados {len(results)} registros, {pages_read} páginas")
+
+            return results
 
     def add(self, key: Any, value: Any) -> bool:
+        """Inserta un nuevo valor para la clave."""
         stats.inc("index.btree.add")
-        """
-        Inserta un nuevo valor para la clave.
-        Args:
-            key: Clave del registro
-            value: Si el índice es clustered, se espera un RID (p.ej. (page_id, offset/slot)).
-                   Si es unclustered, se espera el payload (dict, tuple, etc.).
-        Returns:
-            True si se insertó correctamente
-        """
-        self.insert_count += 1
+        stats.inc("disk.reads")  # ← AGREGAR: Leer para buscar posición
+        stats.inc("disk.writes")  # ← AGREGAR: Escribir nuevo dato
 
-        if self.verbose:
-            print(f"\n>>> INSERT key={key}")
+        with stats.timer("index.btree.add.time"):  # ← CAMBIAR
+            self.insert_count += 1
 
-        # 1. Si ya existe la clave en la hoja destino, agregamos al entry (permitir duplicados)
-        existing_entry = self._find_entry(self.root, key)
-        if existing_entry and existing_entry.key == key:
-            existing_entry.vals.append(value)
+            if self.verbose:
+                print(f"\n>>> INSERT key={key}")
+
+            # 1. Si ya existe la clave en la hoja destino, agregamos al entry
+            existing_entry = self._find_entry(self.root, key)
+            if existing_entry and existing_entry.key == key:
+                existing_entry.vals.append(value)
+                return True
+
+            # 2. Insertar en el índice
+            if self.root.is_full():
+                old_root = self.root
+                self.root = BPlusNode(self.degree, is_leaf=False)
+                self.root.children.append(old_root)
+                old_root.parent = self.root
+                self._split_child(self.root, 0)
+                stats.inc("disk.writes")  # ← AGREGAR: Split implica escritura extra
+
+            self._insert_non_full(self.root, IndexEntry(key, [value]))
             return True
 
-        # 2. Insertar en el índice (para clustered o primer valor unclustered)
-        if self.root.is_full():
-            old_root = self.root
-            self.root = BPlusNode(self.degree, is_leaf=False)
-            self.root.children.append(old_root)
-            old_root.parent = self.root
-            self._split_child(self.root, 0)
-
-        self._insert_non_full(self.root, IndexEntry(key, [value]))
-        return True
-
     def remove(self, key: Any) -> bool:
+        """Elimina un registro por clave"""
         stats.inc("index.btree.remove")
-        """
-        Elimina un registro por clave
-        Returns:
-            True si se eliminó correctamente
-        """
-        self.delete_count += 1
+        stats.inc("disk.reads")  # ← AGREGAR: Leer para encontrar
+        stats.inc("disk.writes")  # ← AGREGAR: Escribir cambios
 
-        if self.verbose:
-            print(f"\n>>> DELETE key={key}")
+        with stats.timer("index.btree.remove.time"):  # ← CAMBIAR
+            self.delete_count += 1
 
-        deleted = self._delete(self.root, key)
+            if self.verbose:
+                print(f"\n>>> DELETE key={key}")
 
-        # Si la raíz quedó vacía, bajar nivel
-        if not self.root.is_leaf and len(self.root.keys) == 0:
-            if len(self.root.children) > 0:
-                self.root = self.root.children[0]
-                self.root.parent = None
-                if self.verbose:
-                    print("  Raíz vacía, altura reducida")
+            deleted = self._delete(self.root, key)
 
-        return deleted
+            # Si la raíz quedó vacía, bajar nivel
+            if not self.root.is_leaf and len(self.root.keys) == 0:
+                if len(self.root.children) > 0:
+                    self.root = self.root.children[0]
+                    self.root.parent = None
+                    if self.verbose:
+                        print("  Raíz vacía, altura reducida")
+
+            return deleted
 
     def get_stats(self) -> dict:
         """Retorna estadísticas de operaciones"""

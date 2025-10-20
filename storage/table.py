@@ -240,3 +240,55 @@ class Table:
         page_id, slot = rid
         rec = self.datafile.read_record(page_id, slot)
         return rec or {}
+
+    def get_query_stats(self) -> Dict[str, Any]:
+        """
+        Obtener estadísticas de la última operación o acumuladas
+        """
+        # ← AGREGAR DEBUG
+        print(f"🔍 DEBUG get_query_stats - Contadores disponibles: {stats.counters}")
+        print(f"🔍 DEBUG get_query_stats - Timers disponibles: {list(stats.timers.keys())}")
+
+        all_stats = {}
+
+        for col_name, idx in self.indexes.items():
+            idx_type = self.schema.indexes[col_name].name.lower()
+
+            print(f"🔍 DEBUG Procesando índice: col={col_name}, type={idx_type}")
+
+            # Métricas específicas del índice
+            all_stats[col_name] = {
+                "type": idx_type,
+                "metrics": {
+                    "operations": {
+                        "search": {
+                            "count": stats.get_counter(f"index.{idx_type}.search"),
+                            "time_ms": round(stats.get_time_ms(f"index.{idx_type}.search.time"), 3),
+                        },
+                        "range": {
+                            "count": stats.get_counter(f"index.{idx_type}.range"),
+                            "time_ms": round(stats.get_time_ms(f"index.{idx_type}.range.time"), 3),
+                        },
+                        "add": {
+                            "count": stats.get_counter(f"index.{idx_type}.add"),
+                            "time_ms": round(stats.get_time_ms(f"index.{idx_type}.add.time"), 3),
+                        },
+                        "remove": {
+                            "count": stats.get_counter(f"index.{idx_type}.remove"),
+                            "time_ms": round(stats.get_time_ms(f"index.{idx_type}.remove.time"), 3),
+                        },
+                    },
+                    "disk_access": {
+                        "reads": stats.get_counter("disk.reads"),
+                        "writes": stats.get_counter("disk.writes"),
+                        "total": stats.get_counter("disk.reads") + stats.get_counter("disk.writes"),
+                    }
+                }
+            }
+
+            print(f"🔍 DEBUG Stats para {col_name}: {all_stats[col_name]}")
+
+        return all_stats
+    def reset_stats(self):
+        """Resetear métricas (útil para benchmarks aislados)"""
+        stats.reset()
