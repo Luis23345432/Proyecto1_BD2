@@ -1,110 +1,123 @@
-"use client"
+"use client";
 
-import type React from "react"
+import type React from "react";
 
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
-import { useAuth } from "@/lib/auth-context"
-import { deleteDatabase, executeQuery } from "@/lib/api-client"
-import { DatabaseSelector } from "@/components/database-selector"
-import { CreateDatabaseModal } from "@/components/create-database-modal"
-import { TablesSelector } from "@/components/tables-selector"
-import { QueryResults } from "@/components/query-results"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Trash2 } from "lucide-react"
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/lib/auth-context";
+import { deleteDatabase, executeQuery } from "@/lib/api-client";
+import { DatabaseSelector } from "@/components/database-selector";
+import { CreateDatabaseModal } from "@/components/create-database-modal";
+import { TablesSelector } from "@/components/tables-selector";
+import { QueryResults } from "@/components/query-results";
+import { CSVImportModal } from "@/components/csv-import-modal";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Trash2 } from "lucide-react";
 
 export default function DBMSManagerPage() {
-  const router = useRouter()
-  const { isAuthenticated, isLoading, username, userId, token, logout } = useAuth()
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
-  const [selectedDatabase, setSelectedDatabase] = useState<string | null>(null)
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
-  const [refreshKey, setRefreshKey] = useState(0)
-  const [isDeleting, setIsDeleting] = useState(false)
-  const [queryInput, setQueryInput] = useState("")
-  const [queryResults, setQueryResults] = useState<{ rows: Record<string, any>[]; count: number } | null>(null)
-  const [isExecuting, setIsExecuting] = useState(false)
-  const [queryError, setQueryError] = useState<string | null>(null)
+  const router = useRouter();
+  const { isAuthenticated, isLoading, username, userId, token, logout } =
+    useAuth();
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [selectedDatabase, setSelectedDatabase] = useState<string | null>(null);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [queryInput, setQueryInput] = useState("");
+  const [queryResults, setQueryResults] = useState<any | null>(null);
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [queryError, setQueryError] = useState<string | null>(null);
+  const [tablesRefreshKey, setTablesRefreshKey] = useState(0);
+  const [isCSVModalOpen, setIsCSVModalOpen] = useState(false);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      router.push("/")
+      router.push("/");
     }
-  }, [isAuthenticated, isLoading, router])
+  }, [isAuthenticated, isLoading, router]);
 
   useEffect(() => {
-    const storedDb = localStorage.getItem("selectedDatabase")
+    const storedDb = localStorage.getItem("selectedDatabase");
     if (storedDb) {
-      setSelectedDatabase(storedDb)
+      setSelectedDatabase(storedDb);
     }
-  }, [])
+  }, []);
 
   const handleLogout = () => {
-    logout()
-    localStorage.removeItem("selectedDatabase")
-    router.push("/")
-  }
+    logout();
+    localStorage.removeItem("selectedDatabase");
+    router.push("/");
+  };
 
   const handleDatabaseSelect = (dbName: string) => {
-    setSelectedDatabase(dbName)
-    localStorage.setItem("selectedDatabase", dbName)
-    setQueryResults(null)
-    setQueryInput("")
-  }
+    setSelectedDatabase(dbName);
+    localStorage.setItem("selectedDatabase", dbName);
+    setQueryResults(null);
+    setQueryInput("");
+  };
 
   const handleDatabaseCreated = (dbName: string) => {
-    handleDatabaseSelect(dbName)
-    setRefreshKey((prev) => prev + 1)
-  }
+    handleDatabaseSelect(dbName);
+    setRefreshKey((prev) => prev + 1);
+  };
 
   const handleDeleteDatabase = async () => {
-    if (!selectedDatabase || !userId || !token) return
+    if (!selectedDatabase || !userId || !token) return;
 
     if (!confirm(`Are you sure you want to delete "${selectedDatabase}"?`)) {
-      return
+      return;
     }
 
-    setIsDeleting(true)
+    setIsDeleting(true);
     try {
-      await deleteDatabase(userId, token, selectedDatabase)
-      setSelectedDatabase(null)
-      localStorage.removeItem("selectedDatabase")
-      setRefreshKey((prev) => prev + 1)
+      await deleteDatabase(userId, token, selectedDatabase);
+      setSelectedDatabase(null);
+      localStorage.removeItem("selectedDatabase");
+      setRefreshKey((prev) => prev + 1);
     } catch (err: any) {
-      console.error("[v0] Error deleting database:", err)
-      alert("Failed to delete database")
+      console.error("[v0] Error deleting database:", err);
+      alert("Failed to delete database");
     } finally {
-      setIsDeleting(false)
+      setIsDeleting(false);
     }
-  }
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.shiftKey && e.key === "Enter") {
-      e.preventDefault()
-      handleExecuteQuery()
+      e.preventDefault();
+      handleExecuteQuery();
     }
-  }
+  };
 
   const handleExecuteQuery = async () => {
     if (!queryInput.trim() || !selectedDatabase || !userId || !token) {
-      setQueryError("Please enter a query and select a database")
-      return
+      setQueryError("Please enter a query and select a database");
+      return;
     }
 
-    setIsExecuting(true)
-    setQueryError(null)
+    setIsExecuting(true);
+    setQueryError(null);
     try {
-      const results = await executeQuery(userId, token, selectedDatabase, queryInput)
-      setQueryResults(results)
+      const results = await executeQuery(
+        userId,
+        token,
+        selectedDatabase,
+        queryInput
+      );
+      setQueryResults(results);
+
+      if (queryInput.trim().toUpperCase().startsWith("CREATE TABLE")) {
+        setTablesRefreshKey((prev) => prev + 1);
+      }
     } catch (err: any) {
-      console.error("[v0] Error executing query:", err)
-      setQueryError(err.error?.detail || "Failed to execute query")
-      setQueryResults(null)
+      console.error("[v0] Error executing query:", err);
+      setQueryError(err.error?.detail || "Failed to execute query");
+      setQueryResults(null);
     } finally {
-      setIsExecuting(false)
+      setIsExecuting(false);
     }
-  }
+  };
 
   if (isLoading) {
     return (
@@ -114,11 +127,11 @@ export default function DBMSManagerPage() {
           <p className="mt-4 text-ebony font-medium">Loading...</p>
         </div>
       </div>
-    )
+    );
   }
 
   if (!isAuthenticated) {
-    return null
+    return null;
   }
 
   return (
@@ -144,13 +157,10 @@ export default function DBMSManagerPage() {
 
             {/* Dropdown Menu */}
             {isDropdownOpen && (
-              <div className="absolute right-0 mt-2 w-48 bg-alabaster border border-timberwolf rounded-lg shadow-lg z-10">
-                <div className="p-3 border-b border-timberwolf">
-                  <p className="text-sm font-medium text-ebony">{username}</p>
-                </div>
+              <div className="absolute right-0 mt-2 w-48 bg-alabaster border border-timberwolf rounded-lg shadow-lg z-10 overflow-hidden">
                 <button
                   onClick={handleLogout}
-                  className="w-full text-left px-4 py-2 text-davys-gray hover:bg-timberwolf hover:text-ebony transition-colors text-sm font-medium"
+                  className="w-full text-left px-4 py-2 text-davys-gray bg-white hover:bg-timberwolf hover:text-ebony transition-colors text-sm font-medium rounded-b-lg"
                 >
                   Logout
                 </button>
@@ -161,15 +171,14 @@ export default function DBMSManagerPage() {
 
         {/* Main Content */}
         <Card className="shadow-lg">
-          <CardHeader>
-            <CardTitle className="text-ebony">Database Management</CardTitle>
-          </CardHeader>
           <CardContent className="space-y-6">
             {/* Database Selector and Controls */}
             <div className="space-y-4">
               <div className="flex items-center gap-4 flex-wrap">
                 <div className="flex-1 min-w-xs">
-                  <label className="block text-sm font-medium text-ebony mb-2">Select Database</label>
+                  <label className="block text-sm font-medium text-ebony mb-2">
+                    Select Database
+                  </label>
                   {userId && token && (
                     <DatabaseSelector
                       key={refreshKey}
@@ -200,14 +209,6 @@ export default function DBMSManagerPage() {
                   </Button>
                 </div>
               </div>
-
-              {selectedDatabase && (
-                <div className="p-4 bg-timberwolf rounded-lg">
-                  <p className="text-sm text-ebony">
-                    <span className="font-medium">Selected Database:</span> {selectedDatabase}
-                  </p>
-                </div>
-              )}
             </div>
 
             {selectedDatabase && userId && token && (
@@ -215,13 +216,22 @@ export default function DBMSManagerPage() {
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   {/* Tables Selector */}
                   <div className="lg:col-span-1">
-                    <label className="block text-sm font-medium text-ebony mb-2">Tables</label>
-                    <TablesSelector userId={userId} token={token} dbName={selectedDatabase} />
+                    <label className="block text-sm font-medium text-ebony mb-2">
+                      Tables
+                    </label>
+                    <TablesSelector
+                      key={tablesRefreshKey}
+                      userId={userId}
+                      token={token}
+                      dbName={selectedDatabase}
+                    />
                   </div>
 
                   {/* Query Input */}
                   <div className="lg:col-span-2">
-                    <label className="block text-sm font-medium text-ebony mb-2">Query Input</label>
+                    <label className="block text-sm font-medium text-ebony mb-2">
+                      Query Input
+                    </label>
                     <textarea
                       value={queryInput}
                       onChange={(e) => setQueryInput(e.target.value)}
@@ -237,6 +247,12 @@ export default function DBMSManagerPage() {
                       >
                         {isExecuting ? "Executing..." : "Execute Query"}
                       </Button>
+                      <Button
+                        onClick={() => setIsCSVModalOpen(true)}
+                        className="bg-cambridge-blue hover:bg-ebony text-alabaster font-medium"
+                      >
+                        Import CSV
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -251,8 +267,10 @@ export default function DBMSManagerPage() {
                 {/* Query Results */}
                 {queryResults && (
                   <div className="border-t border-timberwolf pt-6">
-                    <label className="block text-sm font-medium text-ebony mb-2">Query Results</label>
-                    <QueryResults rows={queryResults.rows} count={queryResults.count} />
+                    <label className="block text-sm font-medium text-ebony mb-2">
+                      Query Results
+                    </label>
+                    <QueryResults response={queryResults} />
                   </div>
                 )}
               </div>
@@ -260,7 +278,9 @@ export default function DBMSManagerPage() {
 
             {!selectedDatabase && (
               <div className="border-t border-timberwolf pt-6">
-                <p className="text-davys-gray text-center py-8">Select or create a database to get started</p>
+                <p className="text-davys-gray text-center py-8">
+                  Select or create a database to get started
+                </p>
               </div>
             )}
           </CardContent>
@@ -277,6 +297,17 @@ export default function DBMSManagerPage() {
           onDatabaseCreated={handleDatabaseCreated}
         />
       )}
+
+      {/* CSV Import Modal */}
+      {userId && token && selectedDatabase && (
+        <CSVImportModal
+          isOpen={isCSVModalOpen}
+          onClose={() => setIsCSVModalOpen(false)}
+          userId={userId}
+          token={token}
+          dbName={selectedDatabase}
+        />
+      )}
     </div>
-  )
+  );
 }
