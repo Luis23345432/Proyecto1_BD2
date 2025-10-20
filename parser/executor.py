@@ -17,7 +17,21 @@ class QueryExecutor:
         table = self.db.get_table(stmt.table)
         if table is None:
             raise ValueError("Tabla no existe")
-        if plan.type == 'INDEX_SCAN' and stmt.condition:
+        # Spatial first
+        if getattr(stmt, 'spatial', None):
+            sp = stmt.spatial or {}
+            kind = sp.get('kind')
+            column = sp.get('column')
+            center = sp.get('center')
+            if kind == 'NEAR':
+                radius = float(sp.get('radius'))
+                rows = table.range_radius(column, center, radius)
+            elif kind == 'KNN':
+                k = int(sp.get('k', 1))
+                rows = table.knn(column, center, k)
+            else:
+                rows = []
+        elif plan.type == 'INDEX_SCAN' and stmt.condition:
             if stmt.condition.op == '=':
                 rows = table.search(plan.column or '', stmt.condition.value)
             else:

@@ -1,229 +1,238 @@
-# Proyecto BD2 – Paso 2: DiskManager + Serialización
+# Proyecto BD2 – Motor de BD + API + Frontend (Docker)
 
-Este proyecto implementa un motor de base de datos por etapas. Este documento describe el Paso 2: DiskManager + Serialización.
+Este proyecto implementa un pequeño motor de base de datos con índices, expuesto vía API FastAPI y un frontend Next.js para operar con SQL y CSV. Incluye despliegue con Docker Compose, soporte de múltiples tipos de índices (BTREE, ISAM, AVL, HASH, RTREE) y consultas espaciales por SQL.
 
-## ¿Qué es DiskManager?
+## Arquitectura rápida
 
-DiskManager es un componente de bajo nivel que administra páginas (bloques) de tamaño fijo (por defecto 4096 bytes) en un archivo de datos (por ejemplo, `data.dat` de una tabla). Sus responsabilidades:
+- Backend: FastAPI + Uvicorn (`api/`), motor en `storage/`, `core/`, `indexes/` y parser SQL en `parser/`.
+- Frontend: Next.js 14 (directorio `auth-app/`) con autenticación simple y un editor de SQL.
+- Persistencia: archivos bajo `data/` (montado como volumen Docker).
+- Métricas: módulo `metrics/` con contadores y tiempos por operación (I/O, índices, etc.).
 
-- Abrir/crear el archivo de datos y asegurar que su tamaño sea múltiplo del tamaño de página.
-- Leer páginas completas por `page_id` (offset = page_id * page_size).
-- Escribir páginas completas en un `page_id` existente.
-- Anexar nuevas páginas al final (append_page), devolviendo el nuevo `page_id`.
-- Flush/sincronización a disco y cierre seguro.
+## Índices soportados y operaciones
 
-Nota: DiskManager NO define la estructura interna de la página (eso se hace en el Paso 3 con DataFile + DataPage). Sólo opera con bytes.
+- BTREE: igualdad y rango (search, range).
+- ISAM: estructura estática por páginas; igualdad y rango; útil para lotes y lecturas.
+- AVL: árbol balanceado; igualdad y rango.
+- HASH (extensible): igualdad.
+- RTREE: espacial en 2D sobre columnas `ARRAY_FLOAT` (p. ej. `[lat, lon]`); soporta búsquedas por radio y KNN.
 
-## Serialización
+## SQL soportado (vía `POST /users/{user}/databases/{db}/query`)
 
-Para serializar registros se incluye un esquema simple basado en JSON con prefijo de longitud:
+- CREATE TABLE con columnas, tipos y opciones por columna:
+	- Tipos: `INT`, `FLOAT`, `DATE`, `VARCHAR[n]`, `ARRAY[FLOAT]`.
+	- Clave primaria: `KEY` en la columna.
+	- Índice: `INDEX {BTREE|ISAM|AVL|HASH|RTREE}` en la columna.
+- INSERT:
+	- `INSERT INTO t VALUES (v1, v2, ...)` (orden según schema), o
+	- `INSERT INTO t (c1, c2) VALUES (v1, v2)`.
+- SELECT:
+	- `SELECT * FROM t WHERE col = value`
+	- `SELECT * FROM t WHERE col BETWEEN a AND b`
+	- Espacial: `SELECT * FROM t WHERE NEAR(col, [lat, lon]) RADIUS r`
+	- Espacial: `SELECT * FROM t WHERE KNN(col, [lat, lon]) K k`
+- DELETE: `DELETE FROM t WHERE col = value`
 
-- `pack_record(obj) -> bytes`: Serializa el objeto a JSON UTF-8 y lo precede con 4 bytes (little-endian) que indican la longitud del payload.
-- `unpack_records(buffer) -> (records, bytes_consumidos)`: Lee sucesivos registros del buffer siguiendo el formato [longitud(4B) | payload] hasta agotar registros completos o encontrar uno incompleto.
+Notas importantes:
+- La sintaxis antigua `CREATE TABLE ... FROM FILE` ya no está soportada. Usa el uploader CSV del frontend o `POST /tables/{table}/load-csv`.
+- Las columnas con `PRIMARY KEY` y tipos `INT/DATE/FLOAT` reciben índices BTREE sugeridos si no se declara uno explícito.
 
-Este formato permite empaquetar múltiples registros en una misma página y detecta delimitaciones de forma fiable.
+## Endpoints principales
 
-## ¿Por qué en un archivo separado (disk_manager.py)?
+- Salud: `GET /healthz`
 
-- Separación de responsabilidades: `main.py` quedó para utilidades de sistema de archivos y metadatos del Paso 1. `disk_manager.py` encapsula el acceso binario de bajo nivel.
-- Reutilización: el Paso 3 (DataFile + DataPage) y capas superiores usarán esta clase sin acoplarse al CLI.
-- Testeabilidad: es más fácil unit-testear `DiskManager` por separado.
+- Usuarios (público + protegido):
+	- `POST /users/register` → crear usuario
+	- `POST /users/login` → obtener JWT
+	- `GET /users/me` → usuario actual (Bearer)
+	- `GET /users` → listar usuarios
+	- `GET /users/{username}` → obtener usuario
 
-## Archivos relevantes
+- Bases de datos (Bearer): `/users/{user_id}/databases`
+	- `POST ""` → crear DB
+	- `GET ""` → listar DBs
+	- `GET /{db_name}` → obtener DB
+	- `DELETE /{db_name}` → borrar DB
 
-- `disk_manager.py`: implementación de `DiskManager`, `pack_record`, `unpack_records`.
-- `main.py`: utilidades del Paso 1 (creación de usuarios/DB/tabla y JSONs). Actualizado para timestamps con timezone.
-- `demo_disk_manager.py`: script de ejemplo para probar append/read y serialización.
+- Tablas (Bearer): `/users/{user_id}/databases/{db}/tables`
+	- `POST ""` → crear tabla (vía JSON del front; o usa SQL CREATE TABLE)
+	- `GET ""` → listar tablas
+	- `GET /{table}/schema` → schema
+	- `GET /{table}/stats` → métricas de índices (agregadas)
+	- `GET /{table}/indexes/{column}/stats` → métricas detalladas por índice
 
-## Cómo probar (PowerShell)
+- Registros (Bearer): `/users/{user_id}/databases/{db}/tables/{table}/records`
+	- `POST ""` → insertar un registro
+	- `GET ""` → listar (scan)
+	- `GET /search?column=col&key=val` → búsqueda por índice
+	- `GET /range?column=col&begin_key=a&end_key=b` → rango por índice
+	- Espacial: `POST /range-radius` body `{column, center:[lat,lon], radius}`
+	- Espacial: `POST /knn` body `{column, center:[lat,lon], k}`
 
-1) Crear estructura base (si no existe):
+- SQL (Bearer): `/users/{user_id}/databases/{db}`
+	- `POST /query` body `{ "sql": "..." }`
+
+- Importación CSV (Bearer): `/users/{user_id}/databases/{db}/tables/{table}`
+	- `POST /load-csv` multipart con `file`
+
+Swagger UI: http://localhost:8000/docs
+
+## Despliegue con Docker Compose (Windows)
+
+Prerrequisitos:
+- Docker Desktop (WSL2 habilitado) y ports libres 8000 (API) y 3000 (front).
+
+Variables de entorno (opcional, `.env` en la raíz):
+- `JWT_SECRET`: clave para firmar JWT.
+- `CORS_ALLOWED_ORIGINS`: `http://localhost:3000,http://127.0.0.1:3000` (por defecto).
+- `NEXT_PUBLIC_API_BASE_URL`: URL del backend para el front (por defecto `http://localhost:8000`).
+
+Ejemplo `.env`:
+
+```
+JWT_SECRET=super-secret-key-change-me
+CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+```
+
+Levantar servicios (en la raíz del repo):
 
 ```powershell
-python .\main.py demo_user sales_db customers
+docker compose build ; docker compose up -d
 ```
 
-2) Ejecutar la demo del DiskManager:
+Servicios:
+- Backend: http://localhost:8000 (salud: `/healthz`, Swagger: `/docs`)
+- Frontend: http://localhost:3000
+
+Logs y control:
 
 ```powershell
-python .\demo_disk_manager.py
+docker compose ps
+docker compose logs -f backend
+docker compose logs -f frontend
 ```
 
-Salida esperada (similar):
+Detener y limpiar:
 
-```
-page_id= 0
-records= [{'id': 1, 'name': 'Alice'}, {'id': 2, 'name': 'Bob'}]
-bytes_used= 54    # (valor aproximado; depende del JSON)
+```powershell
+docker compose down
 ```
 
-## Contrato y errores
+Persistencia: el volumen `./data` del host se monta en `/app/data` (backend) para conservar usuarios/DBs.
 
-- page_size: entero > 0; por defecto 4096.
-- read_page/write_page: requieren `page_id` válido; si no, lanzan ValueError.
-- write_page: exige exactamente `page_size` bytes.
-- append_page: rellena con ceros si se pasan menos bytes; falla si se pasan más.
-- flush: fuerza a OS y usa `fsync` para durabilidad.
+## Prueba funcional guiada desde el Frontend (todas los índices)
 
-## Siguientes pasos
+Objetivo: usando la UI (http://localhost:3000), realizar una secuencia de queries que ejercite BTREE, ISAM, AVL, HASH y RTREE, y visualizar métricas.
 
-- Paso 3 (DataFile + DataPage): definir layout interno de la página (cabecera, slots, etc.) y cómo se mapean los registros serializados a páginas.
-- Añadir pruebas unitarias formales (pytest) y un banco de pruebas.
+1) Registro y acceso
+- Abra el front y registre un usuario (Register), luego Login.
 
-## Métricas y Benchmarking (Paso 18–19)
+2) Crear base de datos
+- Click “New Database” → nombre: `demo` → seleccione `demo` en el selector.
 
-Este proyecto incluye un sistema de métricas ligero (`metrics/StatsManager`) para recolectar:
+3) BTREE (igualdad y rango)
+- En “Query Input”, ejecute estas sentencias UNA POR UNA:
 
-- Contadores (I/O, operaciones de índices, consultas de tabla, etc.)
-- Tiempos acumulados por bloque usando `stats.timer(name)`
+```sql
+-- Tabla Personas con BTREE
+CREATE TABLE Personas (
+	id INT KEY INDEX BTREE,
+	nombre VARCHAR[50] INDEX BTREE,
+	edad INT INDEX BTREE,
+	fecha DATE INDEX BTREE
+);
 
-Instrumentación actual:
+INSERT INTO Personas (id, nombre, edad, fecha) VALUES (1, 'Alice', 30, '2024-01-01');
+INSERT INTO Personas (id, nombre, edad, fecha) VALUES (2, 'Bob',   25, '2024-02-15');
+INSERT INTO Personas (id, nombre, edad, fecha) VALUES (3, 'Caro',  40, '2024-03-20');
 
-- `datafile.py`: page_count, read_page, write_page, append_page, insert_clustered
-- Índices (`indexes/B+Tree.py`, `indexes/ISAM.py`, `indexes/AVL.py`): add/search/range/remove
-- `storage/table.py`: insert/search/range/delete
-- `engine.py`: create_table/insert/search/range/delete
+-- Igualdad
+SELECT * FROM Personas WHERE id = 2;
+-- Rango por edad
+SELECT * FROM Personas WHERE edad BETWEEN 26 AND 45;
+```
 
-Benchmark simple: `benchmarks/benchmark_basic.py`
+4) AVL (igualdad y rango)
 
-1) Ejecutar desde la raíz del proyecto (Windows PowerShell):
+```sql
+CREATE TABLE Productos_AVL (
+	id INT KEY,
+	precio INT INDEX AVL,
+	nombre VARCHAR[40]
+);
+
+INSERT INTO Productos_AVL (id, precio, nombre) VALUES (1, 100, 'Teclado');
+INSERT INTO Productos_AVL (id, precio, nombre) VALUES (2,  50, 'Mouse');
+INSERT INTO Productos_AVL (id, precio, nombre) VALUES (3, 300, 'Monitor');
+
+SELECT * FROM Productos_AVL WHERE precio = 50;
+SELECT * FROM Productos_AVL WHERE precio BETWEEN 60 AND 300;
+```
+
+5) ISAM (igualdad y rango)
+
+```sql
+CREATE TABLE Ventas_ISAM (
+	id INT KEY,
+	monto INT INDEX ISAM,
+	fecha DATE INDEX ISAM
+);
+
+INSERT INTO Ventas_ISAM (id, monto, fecha) VALUES (1, 120, '2024-01-10');
+INSERT INTO Ventas_ISAM (id, monto, fecha) VALUES (2, 350, '2024-02-05');
+INSERT INTO Ventas_ISAM (id, monto, fecha) VALUES (3, 200, '2024-02-20');
+
+SELECT * FROM Ventas_ISAM WHERE monto = 200;
+SELECT * FROM Ventas_ISAM WHERE fecha BETWEEN '2024-02-01' AND '2024-02-28';
+```
+
+6) HASH (igualdad)
+
+```sql
+CREATE TABLE Emails_HASH (
+	id INT KEY,
+	email VARCHAR[64] INDEX HASH
+);
+
+INSERT INTO Emails_HASH (id, email) VALUES (1, 'a@x.com');
+INSERT INTO Emails_HASH (id, email) VALUES (2, 'b@x.com');
+
+SELECT * FROM Emails_HASH WHERE email = 'b@x.com';
+```
+
+7) RTREE (espacial: radio y KNN)
+
+```sql
+CREATE TABLE Lugares_RTREE (
+	id INT KEY,
+	coord ARRAY[FLOAT] INDEX RTREE,
+	label VARCHAR[16]
+);
+
+INSERT INTO Lugares_RTREE (id, coord, label) VALUES (1, [19.4300, -99.1300], 'A');
+INSERT INTO Lugares_RTREE (id, coord, label) VALUES (2, [19.4400, -99.1400], 'B');
+INSERT INTO Lugares_RTREE (id, coord, label) VALUES (3, [19.4500, -99.1200], 'C');
+
+-- Puntos cerca de [19.44, -99.14]
+SELECT * FROM Lugares_RTREE WHERE NEAR(coord, [19.44, -99.14]) RADIUS 0.02;
+
+-- 2 vecinos más cercanos a [19.44, -99.14]
+SELECT * FROM Lugares_RTREE WHERE KNN(coord, [19.44, -99.14]) K 2;
+```
+
+Consejos:
+- En el panel de resultados se muestran `execution_time_ms`, accesos a disco y métricas por índice usado.
+- Para cargar datos masivos usa el botón “Import CSV” y el endpoint `/load-csv` (la tabla debe existir).
+
+## Benchmarks (opcional)
+
+Ejecuta el benchmark básico desde la raíz:
 
 ```powershell
 python benchmarks/benchmark_basic.py
 ```
 
-2) Salida en `benchmarks/out/`:
+Los resultados quedan en `benchmarks/out/` (CSV/JSON y gráficos si `matplotlib` está instalado).
 
-- `metrics.csv` y `metrics.json` (métricas planas y snapshot)
-- `counters.png` (si `matplotlib` está instalado; opcional)
-
-## Backend FastAPI
-
-Instalar dependencias (recomendado en un entorno virtual):
-
-```powershell
-pip install -r requirements.txt
-```
-
-Levantar el servidor de desarrollo:
-
-```powershell
-uvicorn api.app:app --reload
-```
-
-Endpoints principales (resumen):
-
-- Usuarios:
-	- POST /users
-	- GET /users
-	- GET /users/{user_id}
-- Bases de datos:
-	- POST /users/{user_id}/databases
-	- GET /users/{user_id}/databases
-	- GET /users/{user_id}/databases/{db_name}
-	- DELETE /users/{user_id}/databases/{db_name}
-- Tablas:
-	- POST /users/{user_id}/databases/{db_name}/tables
-	- GET /users/{user_id}/databases/{db_name}/tables
-	- GET /users/{user_id}/databases/{db_name}/tables/{table_name}
-	- GET /users/{user_id}/databases/{db_name}/tables/{table_name}/schema
-	- GET /users/{user_id}/databases/{db_name}/tables/{table_name}/stats
-- Registros:
-	- POST /users/{user_id}/databases/{db_name}/tables/{table_name}/records
-	- GET /users/{user_id}/databases/{db_name}/tables/{table_name}/records?limit=100&offset=0
-- SQL:
-	- POST /users/{user_id}/databases/{db_name}/query
-- Importación CSV:
-	- POST /users/{user_id}/databases/{db_name}/tables/{table_name}/load-csv
-
-Swagger UI: http://127.0.0.1:8000/docs
-
-## SQL DDL
-
-El parser soporta una forma simple de DDL para `CREATE TABLE` con lista de columnas, tipos y claves/índices por columna:
-
-- Tipos: `INT`, `VARCHAR[n]`, `DATE`, `ARRAY[FLOAT]` (para coordenadas `[lat, lon]`)
-- Clave primaria: añadir `KEY` a la columna
-- Índices: añadir `INDEX <BTREE|ISAM|AVL|HASH|RTREE>` a la columna
-
-Ejemplo de creación con DDL vía endpoint `/query`:
-
-```
-POST /users/{user_id}/databases/{db_name}/query
-{
-	"sql": "CREATE TABLE Restaurantes ( id INT KEY, nombre VARCHAR[20] INDEX BTREE, fechaRegistro DATE, ubicacion ARRAY[FLOAT] INDEX RTREE );"
-}
-```
-
-Notas:
-- El CSV debe contener encabezados con nombres de columnas compatibles con el esquema.
-- Para `ARRAY[FLOAT]` en CSV, coloque el par como un solo campo, por ejemplo `"[19.43, -99.13]"`.
-
-Importación de CSV:
-- Usa únicamente `POST /users/{user_id}/databases/{db_name}/tables/{table_name}/load-csv`.
-- La tabla debe existir previamente (créala con `/tables` o con `CREATE TABLE` vía `/query`).
-
-Importante: la sintaxis `CREATE TABLE ... FROM FILE` ya no está soportada. Si la usas, el servidor devolverá un error indicando que debes subir el CSV con el endpoint de carga.
-
-### Índices por defecto (sugeridos)
-
-Al crear una tabla, el sistema aplica una política de “índices sugeridos” para completar índices razonables cuando no se especifican explícitamente en el DDL:
-
-- Si una columna es `PRIMARY KEY` o `UNIQUE` → se le asigna índice `BTREE`.
-- Si el tipo de columna es `INT`, `DATE` o `FLOAT` → se le sugiere `BTREE`.
-- Para `VARCHAR` (u otros no listados) → no se asigna índice por defecto, salvo que lo declares en el DDL (`INDEX BTREE|ISAM|AVL|HASH|RTREE`).
-
-Importante:
-- Esta sugerencia se ejecuta en el momento de crear la tabla dentro de `Database.create_table`, por lo que puede añadir índices por defecto incluso si ya definiste algunos índices explícitos en el DDL.
-- Ejemplo: en `CREATE TABLE ... ( id INT KEY, nombre VARCHAR[20] INDEX BTREE, fechaRegistro DATE, ubicacion ARRAY[FLOAT] INDEX RTREE )`, la columna `fechaRegistro` es de tipo `DATE`, por lo que recibirá `BTREE` automáticamente además de los índices que declaraste para otras columnas.
-- Si en algún momento prefieres no tener índice por defecto sobre ciertos tipos (como `DATE`), se puede ajustar la política en el código (`TableSchema.suggest_indexes`) o hacerla configurable en el futuro.
-
-## Índice espacial RTREE (SQL + endpoints)
-
-Creación vía SQL (endpoint `/query`):
-
-```
-POST /users/{user_id}/databases/{db_name}/query
-{
-	"sql": "CREATE TABLE {{placesTable}} ( id INT KEY, coord ARRAY[FLOAT] INDEX RTREE, label VARCHAR[32] );"
-}
-```
-
-Insertar puntos vía SQL:
-
-```
-POST /users/{user_id}/databases/{db_name}/query
-{
-	"sql": "INSERT INTO {{placesTable}} VALUES ( id=1, coord='19.43, -99.13', label='A' );"
-}
-
-POST /users/{user_id}/databases/{db_name}/query
-{
-	"sql": "INSERT INTO {{placesTable}} VALUES ( id=2, coord='19.44, -99.14', label='B' );"
-}
-```
-
-Consultas espaciales con endpoints dedicados (cuando existe un índice `RTREE` sobre una columna `ARRAY_FLOAT`):
-
-- POST `/users/{user_id}/databases/{db_name}/tables/{table_name}/records/range-radius`
-	- Body: `{ "column": "coord", "center": [lat, lon], "radius": 0.01 }`
-	- Devuelve filas dentro de un radio (en grados aprox.).
-- POST `/users/{user_id}/databases/{db_name}/tables/{table_name}/records/knn`
-	- Body: `{ "column": "coord", "center": [lat, lon], "k": 3 }`
-	- Devuelve los k vecinos más cercanos.
-
-Internamente se usa una implementación propia compatible con RTREE; si el paquete opcional `Rtree` está instalado, se usa para acelerar búsquedas.
-
-## Postman
-
-En la carpeta `postman/` se incluyen:
-
-- `BD2_API.postman_collection.json`: colección con carpetas para Health, Users, Databases, Tables, Records, SQL (DDL), Spatial (RTREE) e Import CSV.
-- `BD2_Local.postman_environment.json`: variables `baseUrl`, `userId`, `dbName`, `tableName`.
-- `sample_people.csv` y `restaurantes.csv`: archivos de ejemplo para importación.
-
-Uso:
-1. Importa el environment `BD2_Local` en Postman y ajusta variables si necesitas.
-2. Importa la colección `BD2_API`.
-3. Ejecuta en orden: Users → Databases → Tables/SQL → Records/Spatial según lo que quieras probar.
 
