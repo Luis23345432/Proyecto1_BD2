@@ -1,10 +1,3 @@
-"""
-Gestión de usuarios con autenticación JWT
-- Register: Crear cuenta con username y password
-- Login: Obtener token JWT
-- Me: Ver perfil del usuario actual
-"""
-
 from __future__ import annotations
 
 import os
@@ -31,27 +24,14 @@ router = APIRouter(prefix="/users", tags=["users"])
 # ========================================
 
 def _users_root(engine: DatabaseEngine) -> str:
-    """Ruta raíz de los directorios de usuarios"""
     return os.path.join(engine.root_dir, "data", "users")
 
 
 def _users_db_path(engine: DatabaseEngine) -> str:
-    """Ruta al archivo JSON con credenciales de usuarios"""
     return os.path.join(engine.root_dir, "data", "users.json")
 
 
 def _load_users_db(engine: DatabaseEngine) -> Dict:
-    """
-    Cargar base de datos de usuarios desde JSON
-
-    Estructura:
-    {
-        "juan": {
-            "username": "juan",
-            "hashed_password": "$2b$12$..."
-        }
-    }
-    """
     path = _users_db_path(engine)
     if os.path.exists(path):
         with open(path, 'r', encoding='utf-8') as f:
@@ -60,7 +40,6 @@ def _load_users_db(engine: DatabaseEngine) -> Dict:
 
 
 def _save_users_db(engine: DatabaseEngine, users_db: Dict):
-    """Guardar base de datos de usuarios en JSON"""
     path = _users_db_path(engine)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, 'w', encoding='utf-8') as f:
@@ -73,14 +52,6 @@ def _save_users_db(engine: DatabaseEngine, users_db: Dict):
 
 @router.post("/register", response_model=User, status_code=201)
 def register(payload: UserCreate) -> User:
-    """
-    Registrar un nuevo usuario
-
-    Crea:
-    - Entrada en users.json con username y password hasheado
-    - Directorio: data/users/{username}/databases/
-    - Base de datos por defecto: data/users/{username}/databases/default/
-    """
     engine = DatabaseEngine(os.path.dirname(os.path.dirname(__file__)))
     users_db = _load_users_db(engine)
 
@@ -112,12 +83,6 @@ def register(payload: UserCreate) -> User:
 
 @router.post("/login", response_model=Token)
 def login(payload: UserLogin) -> Token:
-    """
-    Iniciar sesión y obtener token JWT
-
-    El token expira en 30 minutos por defecto.
-    Debe enviarse en headers como: Authorization: Bearer {token}
-    """
     engine = DatabaseEngine(os.path.dirname(os.path.dirname(__file__)))
     users_db = _load_users_db(engine)
 
@@ -152,12 +117,6 @@ def login(payload: UserLogin) -> Token:
 
 @router.get("/me", response_model=User)
 def get_me(current_user: str = Depends(get_current_user)) -> User:
-    """
-    Obtener información del usuario actual (requiere token)
-
-    Header requerido:
-        Authorization: Bearer {token}
-    """
     return User(username=current_user)
 
 
@@ -167,7 +126,6 @@ def get_me(current_user: str = Depends(get_current_user)) -> User:
 
 @router.get("", response_model=List[User])
 def list_users() -> List[User]:
-    """Listar todos los usuarios registrados"""
     engine = DatabaseEngine(os.path.dirname(os.path.dirname(__file__)))
     users_db = _load_users_db(engine)
     return [User(username=username) for username in users_db.keys()]
@@ -175,7 +133,6 @@ def list_users() -> List[User]:
 
 @router.get("/{username}", response_model=User)
 def get_user(username: str) -> User:
-    """Obtener un usuario por su username"""
     engine = DatabaseEngine(os.path.dirname(os.path.dirname(__file__)))
     users_db = _load_users_db(engine)
 

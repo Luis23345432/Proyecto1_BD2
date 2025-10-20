@@ -1,8 +1,3 @@
-"""
-Gestión de tablas (PROTEGIDO)
-- Cada usuario solo puede gestionar tablas en sus propias bases de datos
-"""
-
 from __future__ import annotations
 
 import os
@@ -19,7 +14,6 @@ router = APIRouter(prefix="/users/{user_id}/databases/{db_name}/tables", tags=["
 
 
 def _verify_user_access(user_id: str, current_user: str = Depends(get_current_user)):
-    """Verificar que el usuario autenticado coincida con el user_id de la URL"""
     if user_id != current_user:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -35,9 +29,6 @@ def create_table(
         payload: TableCreate,
         current_user: str = Depends(_verify_user_access)
 ) -> TableOut:
-    """
-    Crear una nueva tabla en la base de datos del usuario autenticado
-    """
     engine = DatabaseEngine(os.path.dirname(os.path.dirname(__file__)))
     db = engine.get_database(user_id, db_name)
 
@@ -105,9 +96,6 @@ def list_tables(
         db_name: str,
         current_user: str = Depends(_verify_user_access)
 ) -> List[TableOut]:
-    """
-    Listar todas las tablas de una base de datos del usuario autenticado
-    """
     engine = DatabaseEngine(os.path.dirname(os.path.dirname(__file__)))
     db = engine.get_database(user_id, db_name)
 
@@ -124,9 +112,6 @@ def get_table(
         table_name: str,
         current_user: str = Depends(_verify_user_access)
 ) -> TableOut:
-    """
-    Obtener información de una tabla específica
-    """
     engine = DatabaseEngine(os.path.dirname(os.path.dirname(__file__)))
     db = engine.get_database(user_id, db_name)
 
@@ -147,9 +132,6 @@ def get_schema(
         table_name: str,
         current_user: str = Depends(_verify_user_access)
 ) -> TableSchemaOut:
-    """
-    Obtener el esquema (columnas e índices) de una tabla
-    """
     engine = DatabaseEngine(os.path.dirname(os.path.dirname(__file__)))
     db = engine.get_database(user_id, db_name)
 
@@ -181,9 +163,6 @@ def get_stats(
         table_name: str,
         current_user: str = Depends(_verify_user_access)
 ) -> TableStatsOut:
-    """
-    Obtener estadísticas de los índices de una tabla
-    """
     engine = DatabaseEngine(os.path.dirname(os.path.dirname(__file__)))
     db = engine.get_database(user_id, db_name)
 
@@ -214,7 +193,6 @@ async def get_index_stats(
         column_name: str,
         current_user: str = Depends(get_current_user)
 ):
-    """Obtiene estadísticas detalladas de un índice."""
     if user_id != current_user:
         raise HTTPException(status_code=403, detail="Access denied")
 

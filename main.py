@@ -36,12 +36,6 @@ def _write_json(path: str, obj: Any) -> None:
 
 
 def create_databases_for_user(user_id: object, base_dir: Optional[str] = None) -> str:
-    """
-    Crea la carpeta `databases` dentro de `data/users/{user_id}`.
-
-    Retorna la ruta absoluta creada.
-    """
-
     uid = _validate_name(user_id, "user_id")
     base_dir = _ensure_base(base_dir)
     target = os.path.join(base_dir, uid, "databases")
@@ -50,7 +44,6 @@ def create_databases_for_user(user_id: object, base_dir: Optional[str] = None) -
 
 
 def create_user(user_id: object, base_dir: Optional[str] = None) -> str:
-    """Crea la carpeta del usuario y un `user_metadata.json` si no existe."""
     uid = _validate_name(user_id, "user_id")
     base_dir = _ensure_base(base_dir)
     user_dir = os.path.join(base_dir, uid)
@@ -69,7 +62,6 @@ def create_user(user_id: object, base_dir: Optional[str] = None) -> str:
 
 
 def create_database(user_id: object, db_name: object, base_dir: Optional[str] = None) -> str:
-    """Crea la carpeta de la base de datos y un `metadata.json` dentro de ella."""
     uid = _validate_name(user_id, "user_id")
     db = _validate_name(db_name, "db_name")
     base_dir = _ensure_base(base_dir)
@@ -104,10 +96,6 @@ def create_database(user_id: object, db_name: object, base_dir: Optional[str] = 
 
 
 def create_table(user_id: object, db_name: object, table_name: object, base_dir: Optional[str] = None) -> str:
-    """Crea la carpeta de la tabla y archivos: data.dat, schema.json, indexes/, stats.json.
-
-    Retorna la ruta absoluta a la carpeta `tables/<table_name>`.
-    """
     uid = _validate_name(user_id, "user_id")
     db = _validate_name(db_name, "db_name")
     table = _validate_name(table_name, "table_name")

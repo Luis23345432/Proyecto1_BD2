@@ -1,9 +1,3 @@
-"""
-ISAM estático con páginas, factor de bloque y overflow encadenado.
-Cumple con los requerimientos del proyecto: 2 niveles, páginas con factor de bloque,
-overflow pages encadenadas, estructura estática después del build.
-"""
-
 from __future__ import annotations
 
 import bisect
@@ -18,7 +12,6 @@ from metrics import stats
 
 @dataclass
 class ISAMPage:
-    """Representa una página de datos con factor de bloque."""
     page_size: int
     records: List[Any] = field(default_factory=list)
     next_overflow: Optional[ISAMPage] = None
@@ -27,14 +20,12 @@ class ISAMPage:
         return len(self.records) >= self.page_size
 
     def add_record(self, record: Any) -> bool:
-        """Intenta agregar un registro. Retorna True si hay espacio."""
         if not self.is_full():
             self.records.append(record)
             return True
         return False
 
     def to_dict(self) -> dict:
-        """Serializa la página para persistencia."""
         return {
             'page_size': self.page_size,
             'records': self.records,
@@ -43,15 +34,6 @@ class ISAMPage:
 
 
 class ISAM(IndexInterface):
-    """
-    ISAM estático de 2 niveles con overflow encadenado.
-
-    Estructura:
-    - Nivel 1 (índice): keys ordenadas que apuntan a páginas
-    - Nivel 2 (datos): páginas con factor de bloque
-    - Overflow: páginas encadenadas cuando se llena una página base
-    """
-
     def __init__(self,
                  page_size: int = 10,
                  is_clustered: bool = False,
@@ -70,7 +52,6 @@ class ISAM(IndexInterface):
         self.overflow_chains: Dict[int, ISAMPage] = {}
 
     def _find_page_index(self, key: Any) -> int:
-        """Encuentra el índice de la página donde debería estar la key."""
         if not self.keys:
             return 0
         stats.inc("disk.reads")  # lectura del índice (nivel 1)
@@ -78,7 +59,6 @@ class ISAM(IndexInterface):
         return max(0, i - 1) if i > 0 else 0
 
     def search(self, key: Any) -> List[Any]:
-        """Busca todos los registros con la key dada."""
         stats.inc("index.isam.search")
 
         with stats.timer("index.isam.search.time"):
@@ -134,7 +114,6 @@ class ISAM(IndexInterface):
             return out
 
     def range_search(self, begin_key: Any, end_key: Any) -> List[Any]:
-        """Búsqueda por rango."""
         stats.inc("index.isam.range")
 
         with stats.timer("index.isam.range.time"):
@@ -172,18 +151,6 @@ class ISAM(IndexInterface):
         return out
 
     def add(self, key: Any, record_or_value: Any) -> bool:
-        """
-        Agrega un registro al ISAM.
-
-        Args:
-            key: La clave de búsqueda
-            record_or_value: Puede ser:
-                - Un RID (page_id, slot)
-                - Un valor arbitrario
-                - Un dict completo
-
-        Internamente siempre se guarda como (key, record_or_value)
-        """
         stats.inc("index.isam.add")
 
         with stats.timer("index.isam.add.time"):
@@ -249,10 +216,6 @@ class ISAM(IndexInterface):
                 current = current.next_overflow
 
     def remove(self, key: Any) -> bool:
-        """
-        Elimina todos los registros con la key dada.
-        Marca como eliminados o remueve físicamente.
-        """
         stats.inc("index.isam.remove")
 
         with stats.timer("index.isam.remove.time"):
@@ -284,13 +247,6 @@ class ISAM(IndexInterface):
         return removed
 
     def _extract_key(self, record: Any) -> Any:
-        """
-        Extrae la key de un registro.
-
-        En este ISAM, los registros se guardan como:
-        - (key, rid) donde rid = (page_id, slot)
-        - [key, rid] si viene de JSON (convertir a tupla)
-        """
         # Normalizar: convertir lista a tupla si es necesario
         if isinstance(record, list):
             record = tuple(record)
@@ -320,10 +276,6 @@ class ISAM(IndexInterface):
         return record
 
     def build_from_pairs(self, pairs: List[Tuple[Any, Any]]):
-        """
-        Construye el ISAM estático desde pares (key, value).
-        Después de esto, la estructura base NO cambia.
-        """
         if not pairs:
             return
 
@@ -352,7 +304,6 @@ class ISAM(IndexInterface):
         self.overflow_chains = {}
 
     def get_stats(self) -> dict:
-        """Retorna estadísticas del índice."""
         total_overflow_pages = 0
         total_overflow_records = 0
 
@@ -379,7 +330,6 @@ class ISAM(IndexInterface):
         }
 
     def save_idx(self, path: str) -> None:
-        """Persiste el índice en disco."""
         # Serializar páginas base
         pages_data = [page.to_dict() for page in self.pages]
 
@@ -409,7 +359,6 @@ class ISAM(IndexInterface):
 
     @classmethod
     def load_idx(cls, path: str) -> 'ISAM':
-        """Carga el índice desde disco."""
         with open(path, 'r', encoding='utf-8') as f:
             blob = json.load(f)
 
@@ -452,7 +401,6 @@ class ISAM(IndexInterface):
 
     @staticmethod
     def _list_to_tuple(obj):
-        """Convierte listas anidadas a tuplas recursivamente."""
         if isinstance(obj, list):
             return tuple(ISAM._list_to_tuple(item) for item in obj)
         return obj

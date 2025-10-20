@@ -13,7 +13,6 @@ router = APIRouter(prefix="/users/{user_id}/databases/{db_name}/tables/{table_na
 
 
 def _verify_user_access(user_id: str, current_user: str = Depends(get_current_user)):
-    """Verificar que el usuario autenticado coincida con el user_id de la URL"""
     if user_id != current_user:
         raise HTTPException(
             status_code=403,
@@ -23,11 +22,6 @@ def _verify_user_access(user_id: str, current_user: str = Depends(get_current_us
 
 
 def _parse_csv_value(value: str, column_type: str) -> Any:
-    """
-    Parsea un valor del CSV según el tipo de columna.
-
-    Maneja casos especiales como arrays, fechas, etc.
-    """
     value = value.strip()
 
     # Arrays (para RTree): "[12.07, -77.05]" o "12.07, -77.05"
@@ -54,17 +48,6 @@ async def load_csv(
         bulk: bool = Query(True, description="Use bulk insert mode (faster, recommended)"),
         current_user: str = Depends(_verify_user_access)
 ):
-    """
-    Carga un archivo CSV en la tabla.
-
-    Query params:
-        - bulk: Si True (default), usa modo bulk - inserta todo y reconstruye índices
-                Si False, inserta uno por uno actualizando índices (LENTO)
-
-    Formato CSV para arrays (ubicaciones):
-        - Opción 1: "12.07, -77.05"
-        - Opción 2: "[12.07, -77.05]"
-    """
     engine = DatabaseEngine(os.path.dirname(os.path.dirname(__file__)))
     db = engine.get_database(user_id, db_name)
     if db is None:

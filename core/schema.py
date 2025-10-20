@@ -1,10 +1,3 @@
-"""
-Esquema de tablas y columnas (Pasos 11 y 12, parte del esquema)
-
-- Column: definición de columna (nombre, tipo, tamaño, constraints)
-- TableSchema: conjunto de columnas, claves e índices sugeridos
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field, asdict
@@ -115,7 +108,6 @@ class TableSchema:
 
     @classmethod
     def load(cls, path: str) -> "TableSchema":
-        """Carga esquema desde JSON"""
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
 

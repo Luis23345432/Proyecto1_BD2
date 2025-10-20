@@ -41,7 +41,6 @@ class QueryExecutor:
         return {"rows": rows, "count": len(rows)}
 
     def execute_insert(self, stmt: InsertStmt) -> Dict[str, Any]:
-        """Ejecuta INSERT INTO tabla [(cols)] VALUES (vals)"""
         table = self.db.get_table(stmt.table)
         if table is None:
             raise ValueError("Tabla no existe")
