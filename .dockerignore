@@ -1,0 +1,22 @@
+# Root dockerignore
+.git
+.gitignore
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.mypy_cache
+.pytest_cache
+.venv
+venv
+node_modules
+dist
+build
+.DS_Store
+*.log
+*.sqlite
+.vscode
+auth-app/.next
+auth-app/node_modules
+auth-app/.turbo
+auth-app/.vercel
