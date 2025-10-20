@@ -210,3 +210,32 @@ export async function executeQuery(userId: string, token: string, dbName: string
 
   return response.json()
 }
+
+export async function uploadCSV(
+  userId: string,
+  token: string,
+  dbName: string,
+  tableName: string,
+  file: File,
+): Promise<{ ok: boolean; inserted: number }> {
+  const formData = new FormData()
+  formData.append("file", file)
+
+  const response = await fetch(`${BASE_URL}/users/${userId}/databases/${dbName}/tables/${tableName}/load-csv`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: formData,
+  })
+
+  if (!response.ok) {
+    const error: ApiError = await response.json()
+    throw {
+      status: response.status,
+      error,
+    }
+  }
+
+  return response.json()
+}
