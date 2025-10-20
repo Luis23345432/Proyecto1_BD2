@@ -1,12 +1,3 @@
-"""
-Paso 3: DataFile y DataPage
-
-DataPage: página física con capacidad variable usando serializer (por defecto JSON length+payload)
-DataFile: gestión de páginas, overflow simple (append de nueva página), lectura/escritura
-Soporte para clustered (datos dentro del datafile) y unclustered (almacenar solo RID si se desea).
-Nota: Este es un diseño mínimo. Para producción, se recomienda cabecera más rica (slots/bitmap, free list, etc.).
-"""
-
 from __future__ import annotations
 
 import os
@@ -23,16 +14,6 @@ from metrics import stats
 
 
 class DataPage:
-    """Página con cabecera y región de datos variable.
-
-    Layout:
-      - Header (8 bytes): '<II' => (used_bytes, next_page_id)
-      - Data region: secuencia de registros serializados (cada uno [4B len][payload])
-      - Padding hasta completar page_size
-
-    Estrategia simple: append de registros al final de la región de datos mientras haya espacio.
-    """
-
     HEADER_FMT = "<II"  # used_bytes, next_page_id
     HEADER_SIZE = struct.calcsize(HEADER_FMT)
 
@@ -114,12 +95,6 @@ class DataPage:
 
 
 class DataFile:
-    """Gestión de páginas para datos (clustered y unclustered básico).
-
-    Por defecto, almacena registros serializados en las páginas.
-    Para unclustered, se podría almacenar solo RIDs u offsets (no implementado aún: placeholder).
-    """
-
     def __init__(
         self,
         path: str,

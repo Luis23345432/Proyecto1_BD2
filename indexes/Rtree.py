@@ -15,16 +15,6 @@ from metrics import stats
 
 
 class RTreeIndex(IndexInterface):
-    """Índice espacial R-Tree compatible con IndexInterface.
-
-    Almacena puntos n-dimensionales (2D/3D típicamente) asociados a RIDs.
-    Persistencia en JSON; el árbol se reconstruye al cargar.
-
-    Operaciones extra para espaciales:
-    - range_search_radius(point, radius) → rids en ese radio
-    - knn(point, k) → rids de los k vecinos más cercanos
-    """
-
     def __init__(self, dimensions: int = 2):
         if dimensions < 2:
             raise ValueError("RTreeIndex requiere al menos 2 dimensiones")
@@ -42,7 +32,6 @@ class RTreeIndex(IndexInterface):
 
     # --------- IndexInterface ---------
     def search(self, key: Any) -> List[Any]:
-        """Búsqueda por igualdad exacta de coordenadas [x,y(,z)]."""
         stats.inc("index.rtree.search")
         stats.inc("disk.reads")  # Simular lectura de nodo
 
@@ -56,7 +45,6 @@ class RTreeIndex(IndexInterface):
             return out
 
     def range_search(self, begin_key: Any, end_key: Any) -> List[Any]:
-        """No aplica semánticamente para RTree (usamos range_search_radius)."""
         stats.inc("index.rtree.range_unsupported")
         return []
 

@@ -37,12 +37,10 @@ security = HTTPBearer()
 # ========================================
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verificar si una contraseña coincide con su hash"""
     return pwd_context.verify(plain_password, hashed_password)
 
 
 def get_password_hash(password: str) -> str:
-    """Generar hash de una contraseña"""
     return pwd_context.hash(password)
 
 
@@ -51,16 +49,6 @@ def get_password_hash(password: str) -> str:
 # ========================================
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    """
-    Crear un token JWT
-
-    Args:
-        data: Diccionario con datos a codificar (típicamente {"sub": username})
-        expires_delta: Tiempo de expiración (por defecto 30 minutos)
-
-    Returns:
-        Token JWT como string
-    """
     to_encode = data.copy()
 
     if expires_delta:
@@ -74,18 +62,6 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 
 
 def decode_token(token: str) -> dict:
-    """
-    Decodificar y validar un token JWT
-
-    Args:
-        token: Token JWT como string
-
-    Returns:
-        Payload del token como diccionario
-
-    Raises:
-        HTTPException: Si el token es inválido o expiró
-    """
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         return payload
@@ -104,23 +80,6 @@ def decode_token(token: str) -> dict:
 async def get_current_user(
         credentials: HTTPAuthorizationCredentials = Depends(security)
 ) -> str:
-    """
-    Dependency para obtener el usuario actual desde el token JWT
-
-    Uso:
-        @router.get("/protected")
-        def protected_route(current_user: str = Depends(get_current_user)):
-            return {"user": current_user}
-
-    Args:
-        credentials: Credenciales HTTP Bearer extraídas automáticamente
-
-    Returns:
-        Username del usuario autenticado
-
-    Raises:
-        HTTPException 401: Si el token es inválido o no contiene username
-    """
     token = credentials.credentials
     payload = decode_token(token)
 

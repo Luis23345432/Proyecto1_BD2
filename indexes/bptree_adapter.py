@@ -1,8 +1,3 @@
-"""Adaptador para exponer BPlusTree/IndexInterface desde 'B+Tree.py'.
-
-Evita problemas de import por el nombre del archivo con símbolo '+'.
-"""
-
 import importlib.util
 import os
 from typing import Any

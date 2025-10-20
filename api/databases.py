@@ -1,9 +1,3 @@
-"""
-Gestión de bases de datos (PROTEGIDO)
-- Cada usuario solo puede acceder a sus propias bases de datos
-- Se valida que user_id en la URL coincida con el usuario autenticado
-"""
-
 from __future__ import annotations
 
 import os
@@ -18,11 +12,6 @@ router = APIRouter(prefix="/users/{user_id}/databases", tags=["databases"])
 
 
 def _verify_user_access(user_id: str, current_user: str = Depends(get_current_user)):
-    """
-    Verificar que el usuario autenticado coincida con el user_id de la URL
-
-    Previene que un usuario acceda a las bases de datos de otro.
-    """
     if user_id != current_user:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -37,13 +26,6 @@ def create_database(
         payload: DatabaseCreate,
         current_user: str = Depends(_verify_user_access)
 ) -> DatabaseOut:
-    """
-    Crear una nueva base de datos para el usuario autenticado
-
-    Requiere:
-        - Token JWT válido
-        - user_id en URL debe coincidir con el usuario autenticado
-    """
     engine = DatabaseEngine(os.path.dirname(os.path.dirname(__file__)))
     db = engine.create_database(user_id, payload.name)
     return DatabaseOut(name=db.name)
@@ -54,9 +36,6 @@ def list_databases(
         user_id: str,
         current_user: str = Depends(_verify_user_access)
 ) -> List[DatabaseOut]:
-    """
-    Listar todas las bases de datos del usuario autenticado
-    """
     engine = DatabaseEngine(os.path.dirname(os.path.dirname(__file__)))
     user_dir = os.path.join(engine.root_dir, "data", "users", user_id, "databases")
 
@@ -76,9 +55,6 @@ def get_database(
         db_name: str,
         current_user: str = Depends(_verify_user_access)
 ) -> DatabaseOut:
-    """
-    Obtener información de una base de datos específica
-    """
     engine = DatabaseEngine(os.path.dirname(os.path.dirname(__file__)))
     db = engine.get_database(user_id, db_name)
 
@@ -94,9 +70,6 @@ def delete_database(
         db_name: str,
         current_user: str = Depends(_verify_user_access)
 ):
-    """
-    Eliminar una base de datos del usuario autenticado
-    """
     engine = DatabaseEngine(os.path.dirname(os.path.dirname(__file__)))
     db_dir = os.path.join(engine.root_dir, "data", "users", user_id, "databases", db_name)
 
