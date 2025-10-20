@@ -44,8 +44,31 @@ export interface QueryRequest {
 }
 
 export interface QueryResponse {
-  rows: Record<string, any>[]
-  count: number
+  rows?: Record<string, any>[]
+  count?: number
+  ok?: boolean
+  table?: string
+  inserted?: number
+  rid?: [number, number]
+  execution_time_ms: number
+  metrics: {
+    total_disk_accesses: number
+    disk_reads: number
+    disk_writes: number
+    indexes: Record<
+      string,
+      {
+        type: string
+        operations: Record<
+          string,
+          {
+            count: number
+            time_ms: number
+          }
+        >
+      }
+    >
+  }
 }
 
 export async function register(data: RegisterRequest): Promise<RegisterResponse> {
