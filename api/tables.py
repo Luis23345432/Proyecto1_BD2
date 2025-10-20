@@ -202,3 +202,69 @@ def get_stats(
             idx_stats[name] = {"error": "no stats"}
 
     return TableStatsOut(name=table_name, indexes=idx_stats)
+
+
+# En api/tables.py o donde tengas los endpoints de tablas
+
+@router.get("/{table_name}/indexes/{column_name}/stats")
+async def get_index_stats(
+        user_id: str,
+        db_name: str,
+        table_name: str,
+        column_name: str,
+        current_user: str = Depends(get_current_user)
+):
+    """Obtiene estadísticas detalladas de un índice."""
+    if user_id != current_user:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    engine = DatabaseEngine(os.path.dirname(os.path.dirname(__file__)))
+    db = engine.get_database(user_id, db_name)
+    if not db:
+        raise HTTPException(status_code=404, detail="Database not found")
+
+    table = db.get_table(table_name)
+    if not table:
+        raise HTTPException(status_code=404, detail="Table not found")
+
+    if column_name not in table.indexes:
+        raise HTTPException(status_code=404, detail=f"No index found for column '{column_name}'")
+
+    idx = table.indexes[column_name]
+
+    # Obtener stats del índice
+    stats = idx.get_stats()
+
+    # Info adicional para ISAM
+    if hasattr(idx, 'keys') and hasattr(idx, 'pages'):
+        from indexes.ISAM import ISAM
+        if isinstance(idx, ISAM):
+            stats['index_keys_sample'] = idx.keys[:10]  # Primeras 10 keys
+            stats['page_details'] = []
+
+            for i, page in enumerate(idx.pages[:5]):  # Primeras 5 páginas
+                page_info = {
+                    'page_index': i,
+                    'records_count': len(page.records),
+                    'is_full': page.is_full(),
+                    'sample_records': page.records[:3]  # Primeros 3 registros
+                }
+                stats['page_details'].append(page_info)
+
+            # Info de overflow
+            stats['overflow_details'] = {}
+            for page_idx, overflow_head in list(idx.overflow_chains.items())[:3]:
+                chain_length = 0
+                current = overflow_head
+                while current:
+                    chain_length += 1
+                    current = current.next_overflow
+                stats['overflow_details'][f'page_{page_idx}'] = {
+                    'chain_length': chain_length,
+                    'records_in_first': len(overflow_head.records)
+                }
+
+    return {
+        "column": column_name,
+        "stats": stats
+    }
