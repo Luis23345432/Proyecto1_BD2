@@ -3,12 +3,22 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { deleteDatabase } from "@/lib/api-client";
+import { DatabaseSelector } from "@/components/database-selector";
+import { CreateDatabaseModal } from "@/components/create-database-modal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Trash2 } from "lucide-react";
 
 export default function DBMSManagerPage() {
   const router = useRouter();
-  const { isAuthenticated, isLoading, username, logout } = useAuth();
+  const { isAuthenticated, isLoading, username, userId, token, logout } =
+    useAuth();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [selectedDatabase, setSelectedDatabase] = useState<string | null>(null);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -16,9 +26,48 @@ export default function DBMSManagerPage() {
     }
   }, [isAuthenticated, isLoading, router]);
 
+  useEffect(() => {
+    const storedDb = localStorage.getItem("selectedDatabase");
+    if (storedDb) {
+      setSelectedDatabase(storedDb);
+    }
+  }, []);
+
   const handleLogout = () => {
     logout();
+    localStorage.removeItem("selectedDatabase");
     router.push("/");
+  };
+
+  const handleDatabaseSelect = (dbName: string) => {
+    setSelectedDatabase(dbName);
+    localStorage.setItem("selectedDatabase", dbName);
+  };
+
+  const handleDatabaseCreated = (dbName: string) => {
+    handleDatabaseSelect(dbName);
+    setRefreshKey((prev) => prev + 1);
+  };
+
+  const handleDeleteDatabase = async () => {
+    if (!selectedDatabase || !userId || !token) return;
+
+    if (!confirm(`Are you sure you want to delete "${selectedDatabase}"?`)) {
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      await deleteDatabase(userId, token, selectedDatabase);
+      setSelectedDatabase(null);
+      localStorage.removeItem("selectedDatabase");
+      setRefreshKey((prev) => prev + 1);
+    } catch (err: any) {
+      console.error("[v0] Error deleting database:", err);
+      alert("Failed to delete database");
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   if (isLoading) {
@@ -76,20 +125,77 @@ export default function DBMSManagerPage() {
 
         {/* Main Content */}
         <Card className="shadow-lg">
-          <CardHeader>
-            <CardTitle className="text-ebony">
-              Database Management System
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-center py-12">
-              <p className="text-davys-gray text-lg">
-                DBMS Manager interface coming soon...
+          <CardContent className="space-y-6">
+            {/* Database Selector and Controls */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-4 flex-wrap">
+                <div className="flex-1 min-w-xs">
+                  <label className="block text-sm font-medium text-ebony mb-2">
+                    Select Database
+                  </label>
+                  {userId && token && (
+                    <DatabaseSelector
+                      key={refreshKey}
+                      userId={userId}
+                      token={token}
+                      selectedDatabase={selectedDatabase}
+                      onDatabaseSelect={handleDatabaseSelect}
+                      onRefresh={() => setRefreshKey((prev) => prev + 1)}
+                    />
+                  )}
+                </div>
+
+                <div className="flex gap-2 pt-6">
+                  <Button
+                    onClick={() => setIsCreateModalOpen(true)}
+                    className="bg-cambridge-blue hover:bg-ebony text-alabaster font-medium"
+                  >
+                    New Database
+                  </Button>
+
+                  <Button
+                    onClick={handleDeleteDatabase}
+                    disabled={!selectedDatabase || isDeleting}
+                    className="bg-red-600 hover:bg-red-700 text-alabaster font-medium disabled:opacity-50"
+                  >
+                    <Trash2 size={18} className="mr-2" />
+                    Delete
+                  </Button>
+                </div>
+              </div>
+
+              {selectedDatabase && (
+                <div className="p-4 bg-timberwolf rounded-lg">
+                  <p className="text-sm text-ebony">
+                    <span className="font-medium">Selected Database:</span>{" "}
+                    {selectedDatabase}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Placeholder for future content */}
+            <div className="border-t border-timberwolf pt-6">
+              <p className="text-davys-gray text-center py-8">
+                {selectedDatabase
+                  ? `Database "${selectedDatabase}" selected. Tables and data management coming soon...`
+                  : "Select or create a database to get started"}
               </p>
             </div>
           </CardContent>
         </Card>
       </div>
+
+      {/* Create Database Modal */}
+      {userId && token && (
+        <CreateDatabaseModal
+          isOpen={isCreateModalOpen}
+          onClose={() => setIsCreateModalOpen(false)}
+          userId={userId}
+          token={token}
+          onDatabaseCreated={handleDatabaseCreated}
+        />
+      )}
     </div>
   );
 }

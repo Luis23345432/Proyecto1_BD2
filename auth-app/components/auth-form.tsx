@@ -65,7 +65,11 @@ export function AuthForm() {
 
     try {
       const response = await login({ username, password })
-      setAuth(username, response.access_token)
+      const tokenParts = response.access_token.split(".")
+      const payload = JSON.parse(atob(tokenParts[1]))
+      const userId = payload.sub || username
+
+      setAuth(username, response.access_token, userId)
       router.push("/dbms")
     } catch (err: any) {
       const apiError: ApiError = err.error
