@@ -1,10 +1,3 @@
-"""
-Clase Table con soporte correcto para ISAM:
-- Los índices se construyen correctamente al inicio
-- INSERTs van al índice base si hay espacio, overflow si está lleno
-- build_indexes() reconstruye desde datos existentes (para CSV loads)
-"""
-
 from __future__ import annotations
 
 import os
@@ -46,7 +39,6 @@ class Table:
             self.schema.save(self.schema_path)
 
     def _initialize_indexes(self):
-        """Inicializa o carga índices desde disco."""
         for col_name, idx_type in self.schema.indexes.items():
             idx_path = os.path.join(self.index_dir, f"{col_name}.idx")
             idx_obj = None
@@ -88,13 +80,6 @@ class Table:
             self.indexes[col_name] = idx_obj
 
     def build_indexes_from_datafile(self):
-        """
-        Construye los índices desde los datos existentes en el datafile.
-        CRÍTICO para ISAM: esto construye el índice base estático.
-        Debe llamarse:
-        - Después de cargar CSV bulk
-        - Al reconstruir índices manualmente
-        """
         print(f"🔨 Construyendo índices desde datafile para '{self.schema.name}'...")
 
         # Recolectar todos los datos del datafile
@@ -179,7 +164,6 @@ class Table:
         print("💾 Índices guardados en disco")
 
     def _save_indexes(self):
-        """Persiste todos los índices en disco."""
         for col_name, tree in self.indexes.items():
             idx_path = os.path.join(self.index_dir, f"{col_name}.idx")
             tree.save_idx(idx_path)
@@ -195,12 +179,6 @@ class Table:
         return 2
 
     def insert(self, values: Dict[str, Any]) -> Tuple[int, int]:
-        """
-        Inserta un registro en la tabla.
-        - Primero inserta en el datafile
-        - Luego actualiza todos los índices
-        - Para ISAM: si no hay índice base construido, va a overflow
-        """
         stats.inc("table.insert.calls")
         with stats.timer("table.insert.time"):
             # Crear registro y validar tipos
@@ -238,21 +216,6 @@ class Table:
             return rid
 
     def insert_bulk(self, values_list: List[Dict[str, Any]], rebuild_indexes: bool = True) -> List[Tuple[int, int]]:
-        """
-        Inserta múltiples registros de forma eficiente.
-
-        Args:
-            values_list: Lista de diccionarios con valores a insertar
-            rebuild_indexes: Si True, reconstruye índices al final (RECOMENDADO para bulk load)
-
-        Returns:
-            Lista de RIDs insertados
-
-        Estrategia:
-            1. Desactiva índices temporalmente
-            2. Inserta todos los registros en datafile
-            3. Reconstruye todos los índices desde datafile (óptimo para ISAM, BTree, etc.)
-        """
         stats.inc("table.insert.bulk")
         with stats.timer("table.insert.bulk.time"):
             rids = []
@@ -289,11 +252,9 @@ class Table:
 
 
     def _pick_index(self, column: str) -> Optional[Any]:
-        """Retorna el índice para una columna si existe."""
         return self.indexes.get(column)
 
     def search(self, column: str, key: Any) -> List[Dict[str, Any]]:
-        """Búsqueda exacta usando índice o full scan."""
         stats.inc("table.search.calls")
         with stats.timer("table.search.time"):
             # Convertir key al tipo correcto
@@ -332,7 +293,6 @@ class Table:
             return results
 
     def range_search(self, column: str, begin_key: Any, end_key: Any) -> List[Dict[str, Any]]:
-        """Búsqueda por rango usando índice."""
         stats.inc("table.range.calls")
         with stats.timer("table.range.time"):
             # Convertir keys al tipo correcto
@@ -359,7 +319,6 @@ class Table:
             return [self.fetch_by_rid(rid) for rid in rids]
 
     def range_radius(self, column: str, center: Any, radius: float) -> List[Dict[str, Any]]:
-        """Búsqueda espacial por radio (RTree)."""
         tree = self._pick_index(column)
         if not tree or not isinstance(tree, RTreeIndex):
             return []
@@ -371,7 +330,6 @@ class Table:
         return [self.fetch_by_rid(rid) for rid in rids]
 
     def knn(self, column: str, center: Any, k: int) -> List[Dict[str, Any]]:
-        """K vecinos más cercanos (RTree)."""
         tree = self._pick_index(column)
         if not tree or not isinstance(tree, RTreeIndex):
             return []
@@ -383,7 +341,6 @@ class Table:
         return [self.fetch_by_rid(rid) for rid in rids]
 
     def delete(self, column: str, key: Any) -> int:
-        """Elimina registros por clave."""
         stats.inc("table.delete.calls")
         with stats.timer("table.delete.time"):
             tree = self._pick_index(column)
@@ -396,13 +353,11 @@ class Table:
             return deleted
 
     def fetch_by_rid(self, rid: Tuple[int, int]) -> Dict[str, Any]:
-        """Recupera un registro por su RID (page_id, slot)."""
         page_id, slot = rid
         rec = self.datafile.read_record(page_id, slot)
         return rec or {}
 
     def get_query_stats(self) -> Dict[str, Any]:
-        """Obtiene estadísticas de operaciones de índices."""
         all_stats = {}
         for col_name, idx in self.indexes.items():
             idx_type = self.schema.indexes[col_name].name.lower()
@@ -430,5 +385,4 @@ class Table:
         return all_stats
 
     def reset_stats(self):
-        """Resetea contadores de métricas."""
         stats.reset()

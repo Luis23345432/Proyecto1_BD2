@@ -1,8 +1,3 @@
-"""
-Clase Database (Paso 14)
-Gestión de múltiples tablas bajo un directorio
-"""
-
 from __future__ import annotations
 
 import os

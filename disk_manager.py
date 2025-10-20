@@ -1,14 +1,3 @@
-"""
-DiskManager + Serialización (Paso 2)
-
-Este módulo provee:
-- DiskManager: lectura/escritura de páginas fijas (por defecto 4096 bytes) en un archivo de datos (data.dat).
-- Utilidades de serialización simple para convertir objetos Python <-> bytes mediante JSON
-  y empaquetarlos con un prefijo de longitud de 4 bytes (little-endian) para flujos.
-
-No gestiona el formato interno de una página (eso es parte del Paso 3: DataFile + DataPage).
-"""
-
 from __future__ import annotations
 
 import os
@@ -26,19 +15,6 @@ disk_writes: int = 0
 
 
 class DiskManager:
-    """Administrador de páginas en disco para un único archivo de datos.
-
-    Responsabilidades:
-      - Abrir/crear el archivo de datos (por ejemplo, data.dat de una tabla).
-      - Asegurar que el tamaño del archivo sea múltiplo del tamaño de página, rellenando con ceros si es necesario.
-      - Leer una página completa (read_page) dado un page_id.
-      - Escribir una página completa (write_page) en un page_id existente.
-      - Añadir una nueva página al final (append_page), devolviendo su page_id.
-      - Forzar a disco (flush) y cerrar el archivo.
-
-    No define la estructura interna de la página ni los registros. Solo maneja bytes.
-    """
-
     def __init__(self, path: str, page_size: int = PAGE_SIZE_DEFAULT) -> None:
         self.path = os.path.abspath(path)
         self.page_size = int(page_size)
@@ -95,10 +71,6 @@ class DiskManager:
         disk_writes += 1
 
     def append_page(self, data: bytes | None = None) -> int:
-        """Añade una página al final del archivo. Si data es None, se escribe una página de ceros.
-        Si data tiene menos de page_size bytes, se rellena con ceros a la derecha. Si tiene más, error.
-        Retorna el nuevo page_id.
-        """
         if data is None:
             data = b"\x00" * self.page_size
         elif len(data) < self.page_size:
@@ -146,10 +118,6 @@ def pack_record(obj: Any) -> bytes:
 
 
 def unpack_records(buffer: bytes) -> Tuple[List[Any], int]:
-    """Desempaqueta múltiples registros de un buffer de bytes.
-    Cada registro es: [4 bytes longitud little-endian] [payload JSON UTF-8].
-    Retorna (registros, bytes_consumidos).
-    """
     records: List[Any] = []
     offset = 0
     total = len(buffer)
@@ -170,12 +138,10 @@ def unpack_records(buffer: bytes) -> Tuple[List[Any], int]:
 
 
 def get_io_counters() -> Tuple[int, int]:
-    """Devuelve (disk_reads, disk_writes)."""
     return disk_reads, disk_writes
 
 
 def reset_io_counters() -> None:
-    """Reinicia los contadores de I/O a cero."""
     global disk_reads, disk_writes
     disk_reads = 0
     disk_writes = 0
