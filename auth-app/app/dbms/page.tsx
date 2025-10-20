@@ -158,9 +158,6 @@ export default function DBMSManagerPage() {
             {/* Dropdown Menu */}
             {isDropdownOpen && (
               <div className="absolute right-0 mt-2 w-48 bg-alabaster border border-timberwolf rounded-lg shadow-lg z-10 overflow-hidden">
-                <div className="p-3 border-b border-timberwolf bg-white rounded-t-lg">
-                  <p className="text-sm font-medium text-ebony">{username}</p>
-                </div>
                 <button
                   onClick={handleLogout}
                   className="w-full text-left px-4 py-2 text-davys-gray bg-white hover:bg-timberwolf hover:text-ebony transition-colors text-sm font-medium rounded-b-lg"
@@ -174,9 +171,6 @@ export default function DBMSManagerPage() {
 
         {/* Main Content */}
         <Card className="shadow-lg">
-          <CardHeader>
-            <CardTitle className="text-ebony">Database Management</CardTitle>
-          </CardHeader>
           <CardContent className="space-y-6">
             {/* Database Selector and Controls */}
             <div className="space-y-4">
@@ -215,15 +209,6 @@ export default function DBMSManagerPage() {
                   </Button>
                 </div>
               </div>
-
-              {selectedDatabase && (
-                <div className="p-4 bg-timberwolf rounded-lg">
-                  <p className="text-sm text-ebony">
-                    <span className="font-medium">Selected Database:</span>{" "}
-                    {selectedDatabase}
-                  </p>
-                </div>
-              )}
             </div>
 
             {selectedDatabase && userId && token && (

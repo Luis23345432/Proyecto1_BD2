@@ -84,8 +84,8 @@ export function CSVImportModal({ isOpen, onClose, userId, token, dbName }: CSVIm
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-alabaster rounded-lg shadow-lg p-6 w-full max-w-md mx-4">
+    <div className="fixed inset-0 flex items-center justify-center z-50">
+      <div className="bg-[#f1f2eb] rounded-lg shadow-lg p-6 w-full max-w-md mx-4">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold text-ebony">Import CSV</h2>
           <button
@@ -152,12 +152,6 @@ export function CSVImportModal({ isOpen, onClose, userId, token, dbName }: CSVIm
               style={{ backgroundColor: "#a4c2a5" }}
             >
               {isUploading ? "Uploading..." : "Upload CSV"}
-            </button>
-            <button
-              onClick={onClose}
-              className="flex-1 px-4 py-2 rounded-lg font-medium text-ebony border border-timberwolf hover:bg-timberwolf transition-colors"
-            >
-              Close
             </button>
           </div>
         </div>

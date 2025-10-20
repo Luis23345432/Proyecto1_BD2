@@ -69,7 +69,7 @@ export function CreateDatabaseModal({ isOpen, onClose, userId, token, onDatabase
               value={dbName}
               onChange={(e) => setDbName(e.target.value)}
               disabled={isLoading}
-              className="border-timberwolf focus:border-cambridge-blue focus:ring-cambridge-blue"
+              className="bg-white border-timberwolf focus:border-cambridge-blue focus:ring-cambridge-blue"
             />
           </div>
 
@@ -81,17 +81,9 @@ export function CreateDatabaseModal({ isOpen, onClose, userId, token, onDatabase
 
           <div className="flex gap-3 pt-4">
             <Button
-              type="button"
-              onClick={onClose}
-              disabled={isLoading}
-              className="flex-1 bg-timberwolf hover:bg-davys-gray text-ebony font-medium"
-            >
-              Cancel
-            </Button>
-            <Button
               type="submit"
               disabled={isLoading}
-              className="flex-1 bg-cambridge-blue hover:bg-ebony text-alabaster font-medium"
+              className="flex-1 bg-[#a4c2a5] hover:bg-ebony text-alabaster font-medium"
             >
               {isLoading ? "Creating..." : "Create"}
             </Button>
