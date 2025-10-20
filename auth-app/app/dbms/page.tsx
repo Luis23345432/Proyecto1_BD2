@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth-context";
 import { deleteDatabase } from "@/lib/api-client";
 import { DatabaseSelector } from "@/components/database-selector";
 import { CreateDatabaseModal } from "@/components/create-database-modal";
+import { TablesSelector } from "@/components/tables-selector";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Trash2 } from "lucide-react";
@@ -16,9 +17,11 @@ export default function DBMSManagerPage() {
     useAuth();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [selectedDatabase, setSelectedDatabase] = useState<string | null>(null);
+  const [selectedTable, setSelectedTable] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [queryInput, setQueryInput] = useState("");
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -41,6 +44,7 @@ export default function DBMSManagerPage() {
 
   const handleDatabaseSelect = (dbName: string) => {
     setSelectedDatabase(dbName);
+    setSelectedTable(null);
     localStorage.setItem("selectedDatabase", dbName);
   };
 
@@ -87,7 +91,7 @@ export default function DBMSManagerPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-alabaster to-timberwolf p-4">
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-8 pt-6">
           <div>
@@ -109,12 +113,12 @@ export default function DBMSManagerPage() {
             {/* Dropdown Menu */}
             {isDropdownOpen && (
               <div className="absolute right-0 mt-2 w-48 bg-alabaster border border-timberwolf rounded-lg shadow-lg z-10 overflow-hidden">
-                <div className="p-3 border-b border-timberwolf bg-white rounded-t-lg">
+                <div className="p-3 border-b border-timberwolf bg-[#f1f2eb] rounded-t-lg">
                   <p className="text-sm font-medium text-ebony">{username}</p>
                 </div>
                 <button
                   onClick={handleLogout}
-                  className="w-full text-left px-4 py-2 text-davys-gray bg-white hover:bg-timberwolf hover:text-ebony transition-colors text-sm font-medium rounded-b-lg"
+                  className="w-full text-left px-4 py-2 text-davys-gray bg-[#f1f2eb] hover:bg-timberwolf hover:text-ebony transition-colors text-sm font-medium rounded-b-lg"
                 >
                   Logout
                 </button>
@@ -163,25 +167,48 @@ export default function DBMSManagerPage() {
                   </Button>
                 </div>
               </div>
+            </div>
 
-              {selectedDatabase && (
-                <div className="p-4 bg-timberwolf rounded-lg">
-                  <p className="text-sm text-ebony">
-                    <span className="font-medium">Selected Database:</span>{" "}
-                    {selectedDatabase}
-                  </p>
+            {selectedDatabase && userId && token && (
+              <div className="border-t border-timberwolf pt-6 space-y-4">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  {/* Tables Selector */}
+                  <div className="lg:col-span-1">
+                    <label className="block text-sm font-medium text-ebony mb-2">
+                      Tables
+                    </label>
+                    <TablesSelector
+                      userId={userId}
+                      token={token}
+                      dbName={selectedDatabase}
+                      selectedTable={selectedTable}
+                      onTableSelect={setSelectedTable}
+                    />
+                  </div>
+
+                  {/* Query Input */}
+                  <div className="lg:col-span-2">
+                    <label className="block text-sm font-medium text-ebony mb-2">
+                      Query Input
+                    </label>
+                    <textarea
+                      value={queryInput}
+                      onChange={(e) => setQueryInput(e.target.value)}
+                      placeholder="Enter your query here..."
+                      className="w-full h-64 p-4 border border-timberwolf rounded-lg bg-white text-ebony placeholder-davys-gray focus:outline-none focus:ring-2 focus:ring-cambridge-blue resize-none"
+                    />
+                  </div>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
 
-            {/* Placeholder for future content */}
-            <div className="border-t border-timberwolf pt-6">
-              <p className="text-davys-gray text-center py-8">
-                {selectedDatabase
-                  ? `Database "${selectedDatabase}" selected. Tables and data management coming soon...`
-                  : "Select or create a database to get started"}
-              </p>
-            </div>
+            {!selectedDatabase && (
+              <div className="border-t border-timberwolf pt-6">
+                <p className="text-davys-gray text-center py-8">
+                  Select or create a database to get started
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

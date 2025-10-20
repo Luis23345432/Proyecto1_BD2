@@ -35,6 +35,10 @@ export interface Database {
   name: string
 }
 
+export interface Table {
+  name: string
+}
+
 export async function register(data: RegisterRequest): Promise<RegisterResponse> {
   const response = await fetch(`${BASE_URL}/users/register`, {
     method: "POST",
@@ -132,4 +136,24 @@ export async function deleteDatabase(userId: string, token: string, dbName: stri
       error,
     }
   }
+}
+
+export async function getTables(userId: string, token: string, dbName: string): Promise<Table[]> {
+  const response = await fetch(`${BASE_URL}/users/${userId}/databases/${dbName}/tables`, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+  })
+
+  if (!response.ok) {
+    const error: ApiError = await response.json()
+    throw {
+      status: response.status,
+      error,
+    }
+  }
+
+  return response.json()
 }

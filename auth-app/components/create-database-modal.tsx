@@ -48,8 +48,8 @@ export function CreateDatabaseModal({ isOpen, onClose, userId, token, onDatabase
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-white bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-alabaster rounded-lg shadow-xl max-w-md w-full">
+    <div className="fixed inset-0 bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-[#f1f2eb] rounded-lg shadow-xl max-w-md w-full">
         <div className="flex items-center justify-between p-6 border-b border-timberwolf">
           <h2 className="text-xl font-bold text-ebony">Create Database</h2>
           <button onClick={onClose} className="text-davys-gray hover:text-ebony transition-colors">
