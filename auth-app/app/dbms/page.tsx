@@ -23,9 +23,10 @@ export default function DBMSManagerPage() {
   const [refreshKey, setRefreshKey] = useState(0)
   const [isDeleting, setIsDeleting] = useState(false)
   const [queryInput, setQueryInput] = useState("")
-  const [queryResults, setQueryResults] = useState<{ rows: Record<string, any>[]; count: number } | null>(null)
+  const [queryResults, setQueryResults] = useState<any | null>(null)
   const [isExecuting, setIsExecuting] = useState(false)
   const [queryError, setQueryError] = useState<string | null>(null)
+  const [tablesRefreshKey, setTablesRefreshKey] = useState(0)
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -97,6 +98,10 @@ export default function DBMSManagerPage() {
     try {
       const results = await executeQuery(userId, token, selectedDatabase, queryInput)
       setQueryResults(results)
+
+      if (queryInput.trim().toUpperCase().startsWith("CREATE TABLE")) {
+        setTablesRefreshKey((prev) => prev + 1)
+      }
     } catch (err: any) {
       console.error("[v0] Error executing query:", err)
       setQueryError(err.error?.detail || "Failed to execute query")
@@ -144,13 +149,13 @@ export default function DBMSManagerPage() {
 
             {/* Dropdown Menu */}
             {isDropdownOpen && (
-              <div className="absolute right-0 mt-2 w-48 bg-alabaster border border-timberwolf rounded-lg shadow-lg z-10">
-                <div className="p-3 border-b border-timberwolf">
+              <div className="absolute right-0 mt-2 w-48 bg-alabaster border border-timberwolf rounded-lg shadow-lg z-10 overflow-hidden">
+                <div className="p-3 border-b border-timberwolf bg-white rounded-t-lg">
                   <p className="text-sm font-medium text-ebony">{username}</p>
                 </div>
                 <button
                   onClick={handleLogout}
-                  className="w-full text-left px-4 py-2 text-davys-gray hover:bg-timberwolf hover:text-ebony transition-colors text-sm font-medium"
+                  className="w-full text-left px-4 py-2 text-davys-gray bg-white hover:bg-timberwolf hover:text-ebony transition-colors text-sm font-medium rounded-b-lg"
                 >
                   Logout
                 </button>
@@ -216,7 +221,7 @@ export default function DBMSManagerPage() {
                   {/* Tables Selector */}
                   <div className="lg:col-span-1">
                     <label className="block text-sm font-medium text-ebony mb-2">Tables</label>
-                    <TablesSelector userId={userId} token={token} dbName={selectedDatabase} />
+                    <TablesSelector key={tablesRefreshKey} userId={userId} token={token} dbName={selectedDatabase} />
                   </div>
 
                   {/* Query Input */}
@@ -252,7 +257,7 @@ export default function DBMSManagerPage() {
                 {queryResults && (
                   <div className="border-t border-timberwolf pt-6">
                     <label className="block text-sm font-medium text-ebony mb-2">Query Results</label>
-                    <QueryResults rows={queryResults.rows} count={queryResults.count} />
+                    <QueryResults response={queryResults} />
                   </div>
                 )}
               </div>
