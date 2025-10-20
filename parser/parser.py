@@ -174,10 +174,59 @@ class SQLParser:
         self._eat('KW', 'INSERT')
         self._eat('KW', 'INTO')
         table = self._eat('IDENT').value
+
+        # ← NUEVO: Verificar si hay lista de columnas explícitas
+        columns = None
+        t = self._peek()
+
+        if t and t.type == 'PUNC' and t.value == '(':
+            # Guardar posición actual
+            saved_pos = self.i
+            self._eat('PUNC', '(')
+
+            # Mirar el siguiente token
+            next_t = self._peek()
+
+            # Si es IDENT, son columnas explícitas
+            if next_t and next_t.type == 'IDENT':
+                # Verificar si después del IDENT viene ',' o ')'
+                # Esto nos ayuda a distinguir entre:
+                # INSERT INTO t (col1, col2) VALUES (...)
+                # vs
+                # INSERT INTO t VALUES (val1, val2)
+                temp_pos = self.i
+                self._eat('IDENT')  # Consumir el identificador
+                lookahead = self._peek()
+                self.i = temp_pos  # Restaurar posición
+
+                # Si viene ',' o ')', son columnas
+                if lookahead and lookahead.type == 'PUNC' and lookahead.value in (',', ')'):
+                    columns = []
+
+                    # Leer nombres de columnas
+                    columns.append(self._eat('IDENT').value)
+
+                    while True:
+                        t = self._peek()
+                        if t and t.type == 'PUNC' and t.value == ',':
+                            self._eat('PUNC', ',')
+                            columns.append(self._eat('IDENT').value)
+                        else:
+                            break
+
+                    self._eat('PUNC', ')')
+                else:
+                    # No son columnas, restaurar y continuar
+                    self.i = saved_pos
+            else:
+                # No es IDENT, restaurar posición
+                self.i = saved_pos
+
+        # Ahora debe venir VALUES
         self._eat('KW', 'VALUES')
         self._eat('PUNC', '(')
 
-        # Parse positional values (standard SQL syntax)
+        # Parse positional values
         positional_values = []
         while True:
             positional_values.append(self._parse_value())
@@ -190,8 +239,16 @@ class SQLParser:
 
         self._eat('PUNC', ')')
 
+        # ← NUEVO: Validar que coincidan columnas y valores
+        if columns and len(columns) != len(positional_values):
+            raise ValueError(f"Column count ({len(columns)}) doesn't match value count ({len(positional_values)})")
+
         # Store as positional for executor to map to column names
         values = {"__positional__": positional_values}
+
+        # ← NUEVO: Agregar columnas explícitas si existen
+        if columns:
+            values["__columns__"] = columns
 
         return InsertStmt(table=table, values=values)
 
