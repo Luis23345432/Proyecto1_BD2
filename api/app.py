@@ -15,11 +15,15 @@ from .csv_import import router as import_router
 def create_app() -> FastAPI:
     app = FastAPI(title="Proyecto BD2 Backend", version="1.0.0")
 
-    # CORS (allow all origins by default; tighten in production)
-    allowed_origins = [
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ]
+    # CORS (default to local dev). You can override via env CORS_ALLOWED_ORIGINS (comma-separated)
+    env_origins = os.getenv("CORS_ALLOWED_ORIGINS")
+    if env_origins:
+        allowed_origins = [o.strip() for o in env_origins.split(",") if o.strip()]
+    else:
+        allowed_origins = [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+        ]
 
     app.add_middleware(
         CORSMiddleware,
