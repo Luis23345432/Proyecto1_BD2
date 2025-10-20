@@ -1,4 +1,10 @@
-const BASE_URL = "http://127.0.0.1:8000"
+// Prefer a runtime-configurable base URL; fallback to current host:8000 when in browser
+const envApiBase = (globalThis as any)?.process?.env?.NEXT_PUBLIC_API_BASE_URL as string | undefined
+const BASE_URL = envApiBase
+  ? envApiBase
+  : (typeof window !== "undefined"
+      ? `${window.location.protocol}//${window.location.hostname}:8000`
+      : "http://127.0.0.1:8000")
 
 export interface RegisterRequest {
   username: string

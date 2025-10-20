@@ -5,6 +5,7 @@ Sistema de autenticación con JWT
 - Dependency para proteger endpoints
 """
 
+import os
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
@@ -16,8 +17,11 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 # CONFIGURACIÓN DE SEGURIDAD
 # ========================================
 
-# ⚠️ CAMBIAR EN PRODUCCIÓN - Usar variable de entorno
-SECRET_KEY = "d8f7a6b5c4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0e9f8a7"
+# SECRET_KEY can be overridden via environment variable JWT_SECRET
+SECRET_KEY = os.getenv(
+    "JWT_SECRET",
+    "d8f7a6b5c4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0e9f8a7",  # default for local/dev
+)
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
