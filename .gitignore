@@ -1,3 +1,6 @@
+############################
+# Backend (Python) ignores #
+############################
 # Python bytecode
 __pycache__/
 *.py[cod]
@@ -39,6 +42,8 @@ desktop.ini
 
 # Logs
 *.log
+.eslintcache
+coverage.xml
 
 # Project runtime data (database files, indexes, benchmarks output)
 data/
@@ -49,9 +54,35 @@ benchmarks/out/
 # Notebooks
 .ipynb_checkpoints/
 
-# Environment files
+# Environment files (commit only samples)
 .env
 .env.*
+!.env.example
+
+############################
+# Frontend (Node/Next.js)  #
+############################
+auth-app/node_modules/
+auth-app/.next/
+auth-app/out/
+auth-app/build/
+auth-app/.turbo/
+auth-app/.vercel/
+auth-app/.pnpm-debug.log*
+auth-app/npm-debug.log*
+auth-app/yarn-debug.log*
+auth-app/yarn-error.log*
+auth-app/*.tsbuildinfo
+auth-app/next-env.d.ts
+auth-app/.eslintcache
+
+############################
+# Docker / Compose         #
+############################
+# Keep Dockerfiles and compose files tracked (explicitly non-ignored)
+!docker-compose.yml
+!Dockerfile
+!Dockerfile.*
 
 # Local tool caches
 /.cache/

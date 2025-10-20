@@ -227,3 +227,51 @@ Uso:
 2. Importa la colección `BD2_API`.
 3. Ejecuta en orden: Users → Databases → Tables/SQL → Records/Spatial según lo que quieras probar.
 
+## Despliegue con Docker Compose
+
+Se añadió soporte para ejecutar backend y frontend con Docker Compose.
+
+Archivos agregados:
+- `Dockerfile.api` (backend FastAPI)
+- `auth-app/Dockerfile` (frontend Next.js)
+- `docker-compose.yml`
+- `.dockerignore` y `auth-app/.dockerignore`
+
+Variables de entorno (crea un archivo `.env` en la raíz si deseas cambiarlas):
+- `JWT_SECRET`: clave para firmar JWT.
+- `CORS_ALLOWED_ORIGINS`: lista separada por comas (ej. `http://localhost:3000,http://127.0.0.1:3000`).
+- `NEXT_PUBLIC_API_BASE_URL`: URL del backend que usará el frontend (por defecto `http://localhost:8000`).
+
+Ejemplo `.env`:
+
+```
+JWT_SECRET=super-secret-key-change-me
+CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+```
+
+Cómo ejecutar (Windows PowerShell, en la raíz del repo):
+
+```
+docker compose build ; docker compose up -d
+```
+
+Servicios:
+- Backend: http://localhost:8000 (Swagger: `/docs`)
+- Frontend: http://localhost:3000
+
+Logs:
+
+```
+docker compose logs -f backend
+docker compose logs -f frontend
+```
+
+Detener:
+
+```
+docker compose down
+```
+
+Persistencia: La carpeta `./data` del host se monta en `/app/data` en el backend para conservar bases de datos y usuarios.
+
