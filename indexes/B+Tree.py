@@ -1,12 +1,3 @@
-"""
-B+ Tree Index Implementation
-Implementación modular lista para integración con sistema de base de datos
-Autor: Luis Lopez
-
-Paso 4: IndexInterface (clase abstracta)
-Paso 5: B+ Tree completo con split/merge/redistribución, soporte clustered/unclustered y persistencia .idx
-"""
-
 import math
 import json
 from typing import Any, List, Optional, Tuple, Dict
@@ -17,45 +8,31 @@ from metrics import stats
 # INTERFACES ABSTRACTAS
 
 class IndexInterface(ABC):
-    """Interfaz base para todos los índices del proyecto"""
 
     @abstractmethod
     def search(self, key: Any) -> List[Any]:
-        """Busca registros por clave exacta"""
         pass
 
     @abstractmethod
     def range_search(self, begin_key: Any, end_key: Any) -> List[Any]:
-        """Busca registros en un rango de claves"""
         pass
 
     @abstractmethod
     def add(self, key: Any, record: Any) -> bool:
-        """Inserta un nuevo registro"""
         pass
 
     @abstractmethod
     def remove(self, key: Any) -> bool:
-        """Elimina un registro por clave"""
         pass
 
     @abstractmethod
     def get_stats(self) -> dict:
-        """Retorna estadísticas de operaciones (para métricas)"""
         pass
-
-
-# NOTA: Este módulo define sólo el índice. La gestión de datos físicos se realiza en otros módulos.
 
 
 #ÍNDICE B+ TREE
 
 class IndexEntry:
-    """Entrada de hoja del índice.
-
-    - Para índices clustered: vals contiene RIDs (tuplas como (page_id, offset/slot)).
-    - Para índices unclustered: vals contiene payloads (los datos del registro).
-    """
 
     def __init__(self, key: Any, vals: Optional[List[Any]] = None):
         self.key = key
@@ -66,7 +43,6 @@ class IndexEntry:
 
 
 class BPlusNode:
-    """Nodo del árbol B+"""
 
     def __init__(self, degree: int, is_leaf: bool = False):
         self.degree = degree
@@ -80,7 +56,6 @@ class BPlusNode:
         return len(self.keys) >= self.degree - 1
 
     def is_underflow(self) -> bool:
-        """Verifica si tiene menos de la mitad de entradas"""
         if self.degree == 3:
             min_keys = 1
         else:
@@ -92,24 +67,12 @@ class BPlusNode:
 
 
 class BPlusTree(IndexInterface):
-    """
-    Implementación completa del índice B+ Tree
-    Soporta operaciones: search, range_search, add, remove
-    Puede ser clustered o unclustered
-    """
 
     def __init__(self,
                  degree: int = 3,
                  is_clustered: bool = False,
                  verbose: bool = False,
                  idx_path: Optional[str] = None):
-        """
-        Args:
-            degree: Grado del árbol (mínimo 3)
-            data_file: Archivo de datos asociado (si es None, se crea uno nuevo)
-            is_clustered: Si el índice está agrupado
-            verbose: Si se imprimen mensajes de debug
-        """
         if degree < 3:
             raise ValueError("El grado debe ser al menos 3")
 
@@ -132,7 +95,6 @@ class BPlusTree(IndexInterface):
     #OPERACIONES PRINCIPALES
 
     def search(self, key: Any) -> List[Any]:
-        """Busca todos los valores asociados a la clave."""
         stats.inc("index.btree.search")
         stats.inc("disk.reads")  # ← AGREGAR: Simular lectura de nodo raíz
 
@@ -156,7 +118,6 @@ class BPlusTree(IndexInterface):
             return results
 
     def range_search(self, begin_key: Any, end_key: Any) -> List[Any]:
-        """Busca todos los valores en el rango [begin_key, end_key]."""
         stats.inc("index.btree.range")
         stats.inc("disk.reads")  # ← AGREGAR
 
@@ -190,7 +151,6 @@ class BPlusTree(IndexInterface):
             return results
 
     def add(self, key: Any, value: Any) -> bool:
-        """Inserta un nuevo valor para la clave."""
         stats.inc("index.btree.add")
         stats.inc("disk.reads")  # ← AGREGAR: Leer para buscar posición
         stats.inc("disk.writes")  # ← AGREGAR: Escribir nuevo dato
@@ -220,7 +180,6 @@ class BPlusTree(IndexInterface):
             return True
 
     def remove(self, key: Any) -> bool:
-        """Elimina un registro por clave"""
         stats.inc("index.btree.remove")
         stats.inc("disk.reads")  # ← AGREGAR: Leer para encontrar
         stats.inc("disk.writes")  # ← AGREGAR: Escribir cambios
@@ -244,7 +203,6 @@ class BPlusTree(IndexInterface):
             return deleted
 
     def get_stats(self) -> dict:
-        """Retorna estadísticas de operaciones"""
         return {
             'index_type': 'B+Tree',
             'clustered': self.is_clustered,
@@ -260,7 +218,6 @@ class BPlusTree(IndexInterface):
     #MÉTODOS AUXILIARES
 
     def _find_entry(self, node: BPlusNode, key: Any) -> Optional[IndexEntry]:
-        """Encuentra una entrada en el árbol"""
         if node.is_leaf:
             for entry in node.children:
                 if entry.key == key:
@@ -273,7 +230,6 @@ class BPlusTree(IndexInterface):
             return self._find_entry(node.children[i], key)
 
     def _find_leaf(self, node: BPlusNode, key: Any) -> BPlusNode:
-        """Encuentra el nodo hoja para una clave"""
         if node.is_leaf:
             return node
         i = 0
@@ -282,7 +238,6 @@ class BPlusTree(IndexInterface):
         return self._find_leaf(node.children[i], key)
 
     def _insert_non_full(self, node: BPlusNode, entry: IndexEntry):
-        """Inserta en un nodo que no está lleno"""
         if node.is_leaf:
             i = 0
             while i < len(node.keys) and node.keys[i] < entry.key:
@@ -308,7 +263,6 @@ class BPlusTree(IndexInterface):
             self._insert_non_full(node.children[i], entry)
 
     def _split_child(self, parent: BPlusNode, index: int):
-        """Divide un nodo hijo lleno"""
         self.split_count += 1
 
         full_node = parent.children[index]
@@ -344,7 +298,6 @@ class BPlusTree(IndexInterface):
             print(f"  Split: promoción de clave {promoted_key}")
 
     def _delete(self, node: BPlusNode, key: Any) -> bool:
-        """Elimina recursivamente con rebalanceo"""
         if node.is_leaf:
             if key in node.keys:
                 idx = node.keys.index(key)
@@ -373,7 +326,6 @@ class BPlusTree(IndexInterface):
             return deleted
 
     def _rebalance(self, parent: BPlusNode, child_idx: int):
-        """Rebalancea un nodo con pocas entradas"""
         child = parent.children[child_idx]
 
         if self.verbose:
@@ -397,7 +349,6 @@ class BPlusTree(IndexInterface):
             self._merge(parent, child_idx)
 
     def _redistribute_left(self, parent: BPlusNode, child_idx: int):
-        """Redistribuir desde hermano izquierdo"""
         child = parent.children[child_idx]
         left = parent.children[child_idx - 1]
 
@@ -417,7 +368,6 @@ class BPlusTree(IndexInterface):
             print("  Redistribución desde hermano izquierdo")
 
     def _redistribute_right(self, parent: BPlusNode, child_idx: int):
-        """Redistribuir desde hermano derecho"""
         child = parent.children[child_idx]
         right = parent.children[child_idx + 1]
 
@@ -437,7 +387,6 @@ class BPlusTree(IndexInterface):
             print("  Redistribución desde hermano derecho")
 
     def _merge(self, parent: BPlusNode, left_idx: int):
-        """Fusiona dos nodos hermanos"""
         self.merge_count += 1
 
         left = parent.children[left_idx]
@@ -461,7 +410,6 @@ class BPlusTree(IndexInterface):
             print(f"  Fusión de nodos hermanos")
 
     def _get_height(self, node: BPlusNode) -> int:
-        """Calcula la altura del árbol"""
         if node.is_leaf:
             return 1
         return 1 + self._get_height(node.children[0])
@@ -469,7 +417,6 @@ class BPlusTree(IndexInterface):
     #UTILIDADES
 
     def print_tree(self, node: Optional[BPlusNode] = None, level: int = 0):
-        """Visualiza el árbol"""
         if node is None:
             node = self.root
         print("  " * level + str(node))
@@ -478,7 +425,6 @@ class BPlusTree(IndexInterface):
                 self.print_tree(child, level + 1)
 
     def print_stats(self):
-        """Imprime estadísticas del índice"""
         stats = self.get_stats()
         print("\n" + "=" * 60)
         print("ESTADÍSTICAS DEL ÍNDICE B+ TREE")

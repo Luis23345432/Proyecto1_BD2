@@ -1,10 +1,3 @@
-"""
-Sistema de métricas para análisis de desempeño
-- Contadores de operaciones (inserts, searches, deletes)
-- Contadores de accesos a disco (reads, writes)
-- Timers para medir tiempos de ejecución
-"""
-
 from __future__ import annotations
 
 import time
@@ -20,7 +13,6 @@ class StatsManager:
         self._active_timers: Dict[str, float] = {}  # Timers activos (para contexto)
 
     def reset(self):
-        """Resetear todas las métricas"""
         self.counters.clear()
         self.timers.clear()
         self.timer_calls.clear()
@@ -31,11 +23,9 @@ class StatsManager:
     # ========================================
 
     def inc(self, key: str, amount: int = 1):
-        """Incrementar un contador"""
         self.counters[key] = self.counters.get(key, 0) + amount
 
     def get_counter(self, key: str) -> int:
-        """Obtener valor de un contador"""
         return self.counters.get(key, 0)
 
     # ========================================
@@ -44,13 +34,6 @@ class StatsManager:
 
     @contextmanager
     def timer(self, key: str):
-        """
-        Context manager para medir tiempo de ejecución
-
-        Uso:
-            with stats.timer("btree.search"):
-                result = tree.search(key)
-        """
         start = time.perf_counter()
         try:
             yield
@@ -60,15 +43,12 @@ class StatsManager:
             self.timer_calls[key] = self.timer_calls.get(key, 0) + 1
 
     def get_time(self, key: str) -> float:
-        """Obtener tiempo total acumulado en segundos"""
         return self.timers.get(key, 0.0)
 
     def get_time_ms(self, key: str) -> float:
-        """Obtener tiempo total acumulado en milisegundos"""
         return self.timers.get(key, 0.0) * 1000
 
     def get_avg_time_ms(self, key: str) -> float:
-        """Obtener tiempo promedio en milisegundos"""
         total_time = self.timers.get(key, 0.0)
         calls = self.timer_calls.get(key, 0)
         if calls == 0:
@@ -80,7 +60,6 @@ class StatsManager:
     # ========================================
 
     def get_stats(self) -> Dict[str, Any]:
-        """Obtener todas las métricas como diccionario"""
         return {
             "counters": dict(self.counters),
             "timers": {
@@ -94,15 +73,6 @@ class StatsManager:
         }
 
     def get_index_stats(self, index_name: str) -> Dict[str, Any]:
-        """
-        Obtener estadísticas específicas de un índice
-
-        Args:
-            index_name: Nombre del índice (ej: "btree", "avl", "hash")
-
-        Returns:
-            Diccionario con métricas del índice
-        """
         prefix = f"{index_name}."
 
         return {
@@ -136,7 +106,6 @@ class StatsManager:
         }
 
     def print_summary(self):
-        """Imprimir resumen de métricas (para debugging)"""
         print("\n" + "=" * 60)
         print("PERFORMANCE METRICS SUMMARY")
         print("=" * 60)

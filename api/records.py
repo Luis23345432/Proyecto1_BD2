@@ -14,7 +14,6 @@ router = APIRouter(prefix="/users/{user_id}/databases/{db_name}/tables/{table_na
 
 
 def _verify_user_access(user_id: str, current_user: str = Depends(get_current_user)):
-    """Verificar que el usuario autenticado coincida con el user_id de la URL"""
     if user_id != current_user:
         raise HTTPException(
             status_code=403,
@@ -31,7 +30,6 @@ def insert_record(
         payload: RecordInsert,
         current_user: str = Depends(_verify_user_access)
 ):
-    """Insertar un nuevo registro en la tabla"""
     start_time = time.perf_counter()
     stats.reset()
 
@@ -89,7 +87,6 @@ def list_records(
         offset: int = Query(0, ge=0),
         current_user: str = Depends(_verify_user_access)
 ):
-    """Listar todos los registros (full scan)"""
     start_time = time.perf_counter()
     stats.reset()
 
@@ -131,7 +128,6 @@ def search_by_column(
         key: str = Query(..., description="Valor a buscar"),
         current_user: str = Depends(_verify_user_access)
 ):
-    """Búsqueda exacta por clave usando índice"""
     start_time = time.perf_counter()
     stats.reset()
 
@@ -170,7 +166,6 @@ def range_search(
         end_key: str = Query(...),
         current_user: str = Depends(_verify_user_access)
 ):
-    """Búsqueda por rango usando índice"""
     start_time = time.perf_counter()
     stats.reset()
 
@@ -207,7 +202,6 @@ def spatial_range(
         payload: SpatialRange,
         current_user: str = Depends(_verify_user_access)
 ):
-    """Búsqueda espacial por radio (RTree)"""
     start_time = time.perf_counter()
     stats.reset()
 
@@ -244,7 +238,6 @@ def spatial_knn(
         payload: SpatialKNN,
         current_user: str = Depends(_verify_user_access)
 ):
-    """Búsqueda K-NN (K vecinos más cercanos) - RTree"""
     start_time = time.perf_counter()
     stats.reset()
 

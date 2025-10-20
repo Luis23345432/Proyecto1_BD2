@@ -14,7 +14,6 @@ router = APIRouter(prefix="/users/{user_id}/databases/{db_name}", tags=["sql"])
 
 
 def _verify_user_access(user_id: str, current_user: str = Depends(get_current_user)):
-    """Verificar que el usuario autenticado coincida con el user_id de la URL"""
     if user_id != current_user:
         raise HTTPException(
             status_code=403,
@@ -24,10 +23,6 @@ def _verify_user_access(user_id: str, current_user: str = Depends(get_current_us
 
 
 def _get_active_indexes(root: str, user_id: str, db_name: str, sql: str) -> dict:
-    """
-    Obtener los índices activos de la tabla mencionada en el SQL
-    Retorna un diccionario con el nombre de columna -> tipo de índice
-    """
     try:
         # Extraer nombre de tabla del SQL (simplificado)
         sql_upper = sql.upper()
@@ -64,9 +59,6 @@ def _get_active_indexes(root: str, user_id: str, db_name: str, sql: str) -> dict
 
 
 def _build_index_metrics(active_indexes: dict) -> dict:
-    """
-    Construir métricas solo para los índices activos y solo operaciones con valores > 0
-    """
     if not active_indexes:
         return {}
 

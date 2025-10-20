@@ -1,7 +1,3 @@
-"""
-Record genérico con validación/convertidores (Paso 10)
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -13,11 +9,6 @@ from core.types import ColumnType, convert_value
 
 @dataclass
 class Record:
-    """Representa un registro vinculado a un TableSchema.
-
-    Internamente se guarda como dict columna->valor ya convertido.
-    """
-
     schema: TableSchema
     values: Dict[str, Any]
 

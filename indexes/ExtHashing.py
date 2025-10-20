@@ -35,8 +35,6 @@ class _Bucket:
 
 
 class ExtHashing(IndexInterface):
-    """Extendible Hashing implementing IndexInterface with JSON persistence."""
-
     def __init__(self, is_clustered: bool = False, global_depth: int = 2, bucket_capacity: int = 8):
         self.is_clustered = is_clustered
         self.global_depth = max(1, int(global_depth))

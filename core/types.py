@@ -1,11 +1,3 @@
-"""
-Tipos y utilidades del sistema de datos (Paso 10)
-
-- ColumnType: tipos soportados
-- IndexType: tipos de índices
-- convert_value: conversión/validación acorde a tipo de columna
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -69,7 +61,6 @@ def _to_varchar(v: Any, max_len: Optional[int]) -> str:
 
 
 def _to_array_float(v: Any) -> List[float]:
-    """Convierte a lista de floats preservando el tipo list"""
     # CRÍTICO: NO llamar a str() si ya es lista
     if v is None:
         return []
@@ -105,7 +96,6 @@ def _to_array_float(v: Any) -> List[float]:
 
 
 def convert_value(col_type: ColumnType, value: Any, *, max_len: Optional[int] = None) -> Any:
-    """Convierte y valida el valor según el tipo de la columna."""
     if col_type == ColumnType.INT:
         return _to_int(value)
     if col_type == ColumnType.FLOAT:

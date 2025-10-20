@@ -1,8 +1,3 @@
-"""
-DatabaseEngine (Paso 15): Orquestador de usuarios y bases de datos.
-Reutiliza el layout existente: data/users/<user>/databases/<db>
-"""
-
 from __future__ import annotations
 
 import os
@@ -42,10 +37,6 @@ class DatabaseEngine:
         return Database(db_dir, db_name)
 
     def execute_query(self, user_id: str, db_name: str, action: str, payload: Dict) -> Dict:
-        """Interfaz mínima tipo RPC para el parser futuro.
-
-        action puede ser: create_table, insert, search, range, delete, list_tables
-        """
         db = self.get_database(user_id, db_name)
         if db is None:
             raise ValueError("Database no existe")
