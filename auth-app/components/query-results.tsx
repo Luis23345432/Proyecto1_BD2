@@ -36,6 +36,18 @@ interface QueryResultsProps {
 export function QueryResults({ response }: QueryResultsProps) {
   const [isMetricsOpen, setIsMetricsOpen] = useState(false)
 
+  const calculateTotalIndexTime = () => {
+    let total = 0
+    Object.values(response.metrics.indexes).forEach((index) => {
+      Object.values(index.operations).forEach((operation) => {
+        total += operation.time_ms
+      })
+    })
+    return total
+  }
+
+  const totalIndexTime = calculateTotalIndexTime()
+
   if (response.rows && response.rows.length > 0) {
     const columns = Object.keys(response.rows[0])
 
@@ -81,13 +93,24 @@ export function QueryResults({ response }: QueryResultsProps) {
           style={{ backgroundColor: "#f1f2eb", color: "#566246" }}
         >
           <div className="text-sm font-medium">Total Rows: {response.count}</div>
-          <button
-            onClick={() => setIsMetricsOpen(true)}
-            className="text-sm font-medium px-3 py-1 rounded hover:opacity-70 transition-opacity"
-            style={{ backgroundColor: "#a4c2a5", color: "#f1f2eb" }}
-          >
-            Execution Time: {response.execution_time_ms.toFixed(2)} ms
-          </button>
+          <div className="flex gap-2">
+            {totalIndexTime > 0 && (
+              <button
+                onClick={() => setIsMetricsOpen(true)}
+                className="text-sm font-medium px-3 py-1 rounded hover:opacity-70 transition-opacity"
+                style={{ backgroundColor: "#a4c2a5", color: "#f1f2eb" }}
+              >
+                Total Index Time: {totalIndexTime.toFixed(2)} ms
+              </button>
+            )}
+            <button
+              onClick={() => setIsMetricsOpen(true)}
+              className="text-sm font-medium px-3 py-1 rounded hover:opacity-70 transition-opacity"
+              style={{ backgroundColor: "#a4c2a5", color: "#f1f2eb" }}
+            >
+              Execution Time: {response.execution_time_ms.toFixed(2)} ms
+            </button>
+          </div>
         </div>
         <MetricsDetailsModal
           isOpen={isMetricsOpen}
@@ -128,13 +151,24 @@ export function QueryResults({ response }: QueryResultsProps) {
           style={{ backgroundColor: "#f1f2eb", color: "#566246" }}
         >
           <div className="text-sm font-medium">Operation completed</div>
-          <button
-            onClick={() => setIsMetricsOpen(true)}
-            className="text-sm font-medium px-3 py-1 rounded hover:opacity-70 transition-opacity"
-            style={{ backgroundColor: "#a4c2a5", color: "#f1f2eb" }}
-          >
-            Execution Time: {response.execution_time_ms.toFixed(2)} ms
-          </button>
+          <div className="flex gap-2">
+            {totalIndexTime > 0 && (
+              <button
+                onClick={() => setIsMetricsOpen(true)}
+                className="text-sm font-medium px-3 py-1 rounded hover:opacity-70 transition-opacity"
+                style={{ backgroundColor: "#a4c2a5", color: "#f1f2eb" }}
+              >
+                Total Index Time: {totalIndexTime.toFixed(2)} ms
+              </button>
+            )}
+            <button
+              onClick={() => setIsMetricsOpen(true)}
+              className="text-sm font-medium px-3 py-1 rounded hover:opacity-70 transition-opacity"
+              style={{ backgroundColor: "#a4c2a5", color: "#f1f2eb" }}
+            >
+              Execution Time: {response.execution_time_ms.toFixed(2)} ms
+            </button>
+          </div>
         </div>
         <MetricsDetailsModal
           isOpen={isMetricsOpen}
@@ -172,13 +206,24 @@ export function QueryResults({ response }: QueryResultsProps) {
           style={{ backgroundColor: "#f1f2eb", color: "#566246" }}
         >
           <div className="text-sm font-medium">Operation completed</div>
-          <button
-            onClick={() => setIsMetricsOpen(true)}
-            className="text-sm font-medium px-3 py-1 rounded hover:opacity-70 transition-opacity"
-            style={{ backgroundColor: "#a4c2a5", color: "#f1f2eb" }}
-          >
-            Execution Time: {response.execution_time_ms.toFixed(2)} ms
-          </button>
+          <div className="flex gap-2">
+            {totalIndexTime > 0 && (
+              <button
+                onClick={() => setIsMetricsOpen(true)}
+                className="text-sm font-medium px-3 py-1 rounded hover:opacity-70 transition-opacity"
+                style={{ backgroundColor: "#a4c2a5", color: "#f1f2eb" }}
+              >
+                Total Index Time: {totalIndexTime.toFixed(2)} ms
+              </button>
+            )}
+            <button
+              onClick={() => setIsMetricsOpen(true)}
+              className="text-sm font-medium px-3 py-1 rounded hover:opacity-70 transition-opacity"
+              style={{ backgroundColor: "#a4c2a5", color: "#f1f2eb" }}
+            >
+              Execution Time: {response.execution_time_ms.toFixed(2)} ms
+            </button>
+          </div>
         </div>
         <MetricsDetailsModal
           isOpen={isMetricsOpen}
