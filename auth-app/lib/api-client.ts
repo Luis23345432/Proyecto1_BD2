@@ -50,8 +50,31 @@ export interface QueryRequest {
 }
 
 export interface QueryResponse {
-  rows: Record<string, any>[]
-  count: number
+  rows?: Record<string, any>[]
+  count?: number
+  ok?: boolean
+  table?: string
+  inserted?: number
+  rid?: [number, number]
+  execution_time_ms: number
+  metrics: {
+    total_disk_accesses: number
+    disk_reads: number
+    disk_writes: number
+    indexes: Record<
+      string,
+      {
+        type: string
+        operations: Record<
+          string,
+          {
+            count: number
+            time_ms: number
+          }
+        >
+      }
+    >
+  }
 }
 
 export async function register(data: RegisterRequest): Promise<RegisterResponse> {
@@ -181,6 +204,35 @@ export async function executeQuery(userId: string, token: string, dbName: string
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({ sql }),
+  })
+
+  if (!response.ok) {
+    const error: ApiError = await response.json()
+    throw {
+      status: response.status,
+      error,
+    }
+  }
+
+  return response.json()
+}
+
+export async function uploadCSV(
+  userId: string,
+  token: string,
+  dbName: string,
+  tableName: string,
+  file: File,
+): Promise<{ ok: boolean; inserted: number }> {
+  const formData = new FormData()
+  formData.append("file", file)
+
+  const response = await fetch(`${BASE_URL}/users/${userId}/databases/${dbName}/tables/${tableName}/load-csv`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: formData,
   })
 
   if (!response.ok) {
