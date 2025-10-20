@@ -7,11 +7,9 @@ interface TablesSelectorProps {
   userId: string
   token: string
   dbName: string
-  selectedTable: string | null
-  onTableSelect: (tableName: string) => void
 }
 
-export function TablesSelector({ userId, token, dbName, selectedTable, onTableSelect }: TablesSelectorProps) {
+export function TablesSelector({ userId, token, dbName }: TablesSelectorProps) {
   const [tables, setTables] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -57,26 +55,9 @@ export function TablesSelector({ userId, token, dbName, selectedTable, onTableSe
           <ul style={{ borderColor: "#d8dad3" }}>
             {tables.map((table) => (
               <li key={table} style={{ borderBottomColor: "#d8dad3", borderBottomWidth: "1px" }}>
-                <button
-                  onClick={() => onTableSelect(table)}
-                  className="w-full text-left px-4 py-3 transition-colors text-sm font-medium"
-                  style={{
-                    backgroundColor: selectedTable === table ? "#d8dad3" : "white",
-                    color: selectedTable === table ? "#566246" : "#566246",
-                  }}
-                  onMouseEnter={(e) => {
-                    if (selectedTable !== table) {
-                      e.currentTarget.style.backgroundColor = "#f1f2eb"
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (selectedTable !== table) {
-                      e.currentTarget.style.backgroundColor = "white"
-                    }
-                  }}
-                >
+                <div className="px-4 py-3 text-sm font-medium" style={{ color: "#566246" }}>
                   {table}
-                </button>
+                </div>
               </li>
             ))}
           </ul>

@@ -39,6 +39,15 @@ export interface Table {
   name: string
 }
 
+export interface QueryRequest {
+  sql: string
+}
+
+export interface QueryResponse {
+  rows: Record<string, any>[]
+  count: number
+}
+
 export async function register(data: RegisterRequest): Promise<RegisterResponse> {
   const response = await fetch(`${BASE_URL}/users/register`, {
     method: "POST",
@@ -145,6 +154,27 @@ export async function getTables(userId: string, token: string, dbName: string): 
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     },
+  })
+
+  if (!response.ok) {
+    const error: ApiError = await response.json()
+    throw {
+      status: response.status,
+      error,
+    }
+  }
+
+  return response.json()
+}
+
+export async function executeQuery(userId: string, token: string, dbName: string, sql: string): Promise<QueryResponse> {
+  const response = await fetch(`${BASE_URL}/users/${userId}/databases/${dbName}/query`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ sql }),
   })
 
   if (!response.ok) {
