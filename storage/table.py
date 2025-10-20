@@ -95,8 +95,28 @@ class Table:
     def insert(self, values: Dict[str, Any]) -> Tuple[int, int]:
         stats.inc("table.insert.calls")
         with stats.timer("table.insert.time"):
+            print(f"1. DEBUG values recibidos: {values}")
+            print(f"1. DEBUG ubicacion tipo: {type(values.get('ubicacion'))}")
+
+            # ← AGREGAR ESTO
+            print(f"DEBUG schema.columns:")
+            for col in self.schema.columns:
+                print(f"  - {col.name}: type={col.col_type}, length={col.length}")
+
             rec = Record(self.schema, values)
-            rid = self.datafile.insert_clustered(rec.to_dict())  # (page_id, slot)
+
+            print(f"2. DEBUG rec.values: {rec.values}")
+            print(f"2. DEBUG ubicacion tipo después Record: {type(rec.values.get('ubicacion'))}")
+
+            rec_dict = rec.to_dict()
+
+            print(f"3. DEBUG rec.to_dict(): {rec_dict}")
+            print(f"3. DEBUG ubicacion tipo después to_dict: {type(rec_dict.get('ubicacion'))}")
+
+            rid = self.datafile.insert_clustered(rec_dict)
+
+            print(f"4. DEBUG después de insert_clustered, rid: {rid}")
+
             # actualizar índices
             for col in self.schema.columns:
                 if col.name in self.indexes:
@@ -104,6 +124,9 @@ class Table:
                     if key is None:
                         continue
                     tree = self.indexes[col.name]
+
+                    print(f"5. DEBUG indexando {col.name}, key: {key}, tipo: {type(key)}")
+
                     # Para RTree, la clave debe ser un punto [x,y,(z)]
                     try:
                         if isinstance(tree, RTreeIndex):
@@ -113,15 +136,17 @@ class Table:
                                 if isinstance(key, str):
                                     parts = [p.strip() for p in key.split(',')]
                                     key = [float(p) for p in parts]
+
+                            print(f"6. DEBUG antes de tree.add, key: {key}, tipo: {type(key)}")
                             tree.add(key, rid)
                         else:
                             tree.add(key, rid)
-                    except Exception:
+                    except Exception as e:
+                        print(f"ERROR en tree.add: {e}")
                         # si falla, no rompemos la inserción de la tabla
                         tree.add(key, rid)
             self._save_indexes()
             return rid
-
     def _pick_index(self, column: str) -> Optional[BPlusTree]:
         return self.indexes.get(column)
 
@@ -215,3 +240,55 @@ class Table:
         page_id, slot = rid
         rec = self.datafile.read_record(page_id, slot)
         return rec or {}
+
+    def get_query_stats(self) -> Dict[str, Any]:
+        """
+        Obtener estadísticas de la última operación o acumuladas
+        """
+        # ← AGREGAR DEBUG
+        print(f"🔍 DEBUG get_query_stats - Contadores disponibles: {stats.counters}")
+        print(f"🔍 DEBUG get_query_stats - Timers disponibles: {list(stats.timers.keys())}")
+
+        all_stats = {}
+
+        for col_name, idx in self.indexes.items():
+            idx_type = self.schema.indexes[col_name].name.lower()
+
+            print(f"🔍 DEBUG Procesando índice: col={col_name}, type={idx_type}")
+
+            # Métricas específicas del índice
+            all_stats[col_name] = {
+                "type": idx_type,
+                "metrics": {
+                    "operations": {
+                        "search": {
+                            "count": stats.get_counter(f"index.{idx_type}.search"),
+                            "time_ms": round(stats.get_time_ms(f"index.{idx_type}.search.time"), 3),
+                        },
+                        "range": {
+                            "count": stats.get_counter(f"index.{idx_type}.range"),
+                            "time_ms": round(stats.get_time_ms(f"index.{idx_type}.range.time"), 3),
+                        },
+                        "add": {
+                            "count": stats.get_counter(f"index.{idx_type}.add"),
+                            "time_ms": round(stats.get_time_ms(f"index.{idx_type}.add.time"), 3),
+                        },
+                        "remove": {
+                            "count": stats.get_counter(f"index.{idx_type}.remove"),
+                            "time_ms": round(stats.get_time_ms(f"index.{idx_type}.remove.time"), 3),
+                        },
+                    },
+                    "disk_access": {
+                        "reads": stats.get_counter("disk.reads"),
+                        "writes": stats.get_counter("disk.writes"),
+                        "total": stats.get_counter("disk.reads") + stats.get_counter("disk.writes"),
+                    }
+                }
+            }
+
+            print(f"🔍 DEBUG Stats para {col_name}: {all_stats[col_name]}")
+
+        return all_stats
+    def reset_stats(self):
+        """Resetear métricas (útil para benchmarks aislados)"""
+        stats.reset()

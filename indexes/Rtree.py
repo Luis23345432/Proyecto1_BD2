@@ -44,13 +44,16 @@ class RTreeIndex(IndexInterface):
     def search(self, key: Any) -> List[Any]:
         """Búsqueda por igualdad exacta de coordenadas [x,y(,z)]."""
         stats.inc("index.rtree.search")
-        coords = self._coerce_point(key)
-        # encontrar todos con coords exactas
-        out: List[Any] = []
-        for _, (pt, rid) in self._points.items():
-            if self._eq_coords(pt, coords):
-                out.append(rid)
-        return out
+        stats.inc("disk.reads")  # Simular lectura de nodo
+
+        with stats.timer("index.rtree.search.time"):
+            coords = self._coerce_point(key)
+            # encontrar todos con coords exactas
+            out: List[Any] = []
+            for _, (pt, rid) in self._points.items():
+                if self._eq_coords(pt, coords):
+                    out.append(rid)
+            return out
 
     def range_search(self, begin_key: Any, end_key: Any) -> List[Any]:
         """No aplica semánticamente para RTree (usamos range_search_radius)."""
@@ -59,30 +62,38 @@ class RTreeIndex(IndexInterface):
 
     def add(self, key: Any, record: Any) -> bool:
         stats.inc("index.rtree.add")
-        coords = self._coerce_point(key)
-        pid = self._next_id
-        self._next_id += 1
-        self._points[pid] = (coords, record)
-        if self._rtree is not None:
-            bbox = self._bbox(coords)
-            self._rtree.insert(pid, bbox)
-        return True
+        stats.inc("disk.reads")  # Leer para buscar posición
+        stats.inc("disk.writes")  # Escribir nuevo dato
+
+        with stats.timer("index.rtree.add.time"):
+            coords = self._coerce_point(key)
+            pid = self._next_id
+            self._next_id += 1
+            self._points[pid] = (coords, record)
+            if self._rtree is not None:
+                bbox = self._bbox(coords)
+                self._rtree.insert(pid, bbox)
+            return True
 
     def remove(self, key: Any) -> bool:
         stats.inc("index.rtree.remove")
-        coords = self._coerce_point(key)
-        to_del: List[int] = [pid for pid, (pt, _) in self._points.items() if self._eq_coords(pt, coords)]
-        ok = False
-        for pid in to_del:
-            pt, _ = self._points.get(pid, (None, None))  # type: ignore
-            if pt is None:
-                continue
-            if self._rtree is not None:
-                self._rtree.delete(pid, self._bbox(pt))
-            # borrar del diccionario en memoria
-            del self._points[pid]
-            ok = True
-        return ok
+        stats.inc("disk.reads")  # Leer para encontrar
+        stats.inc("disk.writes")  # Escribir cambios
+
+        with stats.timer("index.rtree.remove.time"):
+            coords = self._coerce_point(key)
+            to_del: List[int] = [pid for pid, (pt, _) in self._points.items() if self._eq_coords(pt, coords)]
+            ok = False
+            for pid in to_del:
+                pt, _ = self._points.get(pid, (None, None))  # type: ignore
+                if pt is None:
+                    continue
+                if self._rtree is not None:
+                    self._rtree.delete(pid, self._bbox(pt))
+                # borrar del diccionario en memoria
+                del self._points[pid]
+                ok = True
+            return ok
 
     def get_stats(self) -> dict:
         return {
@@ -94,44 +105,52 @@ class RTreeIndex(IndexInterface):
     # --------- Operaciones espaciales ---------
     def range_search_radius(self, center: List[float], radius: float) -> List[Any]:
         stats.inc("index.rtree.range_radius")
-        c = self._coerce_point(center)
-        out: List[Any] = []
-        if self._rtree is None:
-            # sin rtree: filtrar lineal
-            for pt, rid in self._points.values():
+        stats.inc("disk.reads")  # Leer nodos para búsqueda espacial
+
+        with stats.timer("index.rtree.range_radius.time"):
+            c = self._coerce_point(center)
+            out: List[Any] = []
+            if self._rtree is None:
+                # sin rtree: filtrar lineal
+                for pt, rid in self._points.values():
+                    if self._dist(c, pt) <= radius:
+                        out.append(rid)
+                return out
+            # usar bbox para candidatos
+            candidates = list(self._rtree.intersection(self._bbox_for_radius(c, radius)))
+            for pid in candidates:
+                stats.inc("disk.reads")  # Lectura por cada candidato
+                pt, rid = self._points.get(pid, (None, None))  # type: ignore
+                if pt is None:
+                    continue
                 if self._dist(c, pt) <= radius:
                     out.append(rid)
             return out
-        # usar bbox para candidatos
-        candidates = list(self._rtree.intersection(self._bbox_for_radius(c, radius)))
-        for pid in candidates:
-            pt, rid = self._points.get(pid, (None, None))  # type: ignore
-            if pt is None:
-                continue
-            if self._dist(c, pt) <= radius:
-                out.append(rid)
-        return out
 
     def knn(self, center: List[float], k: int) -> List[Any]:
         stats.inc("index.rtree.knn")
-        c = self._coerce_point(center)
-        if k <= 0:
-            return []
-        if self._rtree is None:
-            # ordenar linealmente por distancia
-            arr = sorted(((self._dist(c, pt), rid) for pt, rid in self._points.values()), key=lambda x: x[0])
+        stats.inc("disk.reads")  # Leer para búsqueda KNN
+
+        with stats.timer("index.rtree.knn.time"):
+            c = self._coerce_point(center)
+            if k <= 0:
+                return []
+            if self._rtree is None:
+                # ordenar linealmente por distancia
+                arr = sorted(((self._dist(c, pt), rid) for pt, rid in self._points.values()), key=lambda x: x[0])
+                return [rid for _, rid in arr[:k]]
+            # rtree nearest
+            q = self._point_bbox(c)
+            ids = list(self._rtree.nearest(q, num_results=k))
+            arr: List[Tuple[float, Any]] = []
+            for pid in ids:
+                stats.inc("disk.reads")  # Lectura por cada vecino
+                pt, rid = self._points.get(pid, (None, None))  # type: ignore
+                if pt is None:
+                    continue
+                arr.append((self._dist(c, pt), rid))
+            arr.sort(key=lambda x: x[0])
             return [rid for _, rid in arr[:k]]
-        # rtree nearest
-        q = self._point_bbox(c)
-        ids = list(self._rtree.nearest(q, num_results=k))
-        arr: List[Tuple[float, Any]] = []
-        for pid in ids:
-            pt, rid = self._points.get(pid, (None, None))  # type: ignore
-            if pt is None:
-                continue
-            arr.append((self._dist(c, pt), rid))
-        arr.sort(key=lambda x: x[0])
-        return [rid for _, rid in arr[:k]]
 
     # --------- Persistencia JSON ---------
     def save_idx(self, path: str) -> None:

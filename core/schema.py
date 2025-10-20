@@ -111,8 +111,42 @@ class TableSchema:
             json.dump(self.to_dict(), f, ensure_ascii=False, indent=2)
         os.replace(tmp, path)
 
-    @staticmethod
-    def load(path: str) -> "TableSchema":
+    # En core/schema.py
+
+    @classmethod
+    def load(cls, path: str) -> "TableSchema":
+        """Carga esquema desde JSON"""
         with open(path, "r", encoding="utf-8") as f:
-            d = json.load(f)
-        return TableSchema.from_dict(d)
+            data = json.load(f)
+
+        schema = cls(name=data["name"])
+
+        for col_data in data["columns"]:
+            # ← CRÍTICO: Convertir string a enum
+            col_type_str = col_data["col_type"]
+
+            # Convertir string a ColumnType enum
+            if isinstance(col_type_str, str):
+                col_type = ColumnType[col_type_str]  # "ARRAY_FLOAT" -> ColumnType.ARRAY_FLOAT
+            else:
+                col_type = col_type_str
+
+            col = Column(
+                name=col_data["name"],
+                col_type=col_type,  # ← Ahora es enum
+                length=col_data.get("length"),
+                nullable=col_data.get("nullable", True),
+                unique=col_data.get("unique", False),
+                primary_key=col_data.get("primary_key", False),
+            )
+            schema.columns.append(col)
+
+        # Cargar índices
+        for col_name, idx_type_str in data.get("indexes", {}).items():
+            if isinstance(idx_type_str, str):
+                idx_type = IndexType[idx_type_str]
+            else:
+                idx_type = idx_type_str
+            schema.indexes[col_name] = idx_type
+
+        return schema

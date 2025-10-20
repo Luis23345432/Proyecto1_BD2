@@ -41,11 +41,91 @@ class QueryExecutor:
         return {"rows": rows, "count": len(rows)}
 
     def execute_insert(self, stmt: InsertStmt) -> Dict[str, Any]:
+        """Ejecuta INSERT INTO tabla [(cols)] VALUES (vals)"""
         table = self.db.get_table(stmt.table)
         if table is None:
             raise ValueError("Tabla no existe")
-        rid = table.insert(stmt.values)
-        return {"ok": True, "rid": rid}
+
+        # Obtener valores posicionales y columnas explícitas
+        positional_values = stmt.values.get("__positional__", [])
+        explicit_columns = stmt.values.get("__columns__", None)
+
+        # Construir el diccionario de valores
+        if explicit_columns:
+            # Caso: INSERT INTO tabla (col1, col2) VALUES (val1, val2)
+            print(f"🔍 INSERT con columnas explícitas: {explicit_columns}")
+            print(f"🔍 INSERT valores posicionales: {positional_values}")
+
+            # Validar longitudes
+            if len(explicit_columns) != len(positional_values):
+                raise ValueError(
+                    f"Column count ({len(explicit_columns)}) doesn't match "
+                    f"value count ({len(positional_values)})"
+                )
+
+            # Mapear columnas explícitas a valores
+            mapped_values = {col: val for col, val in zip(explicit_columns, positional_values)}
+
+            # Verificar que todas las columnas explícitas existan en el schema
+            schema_column_names = {col.name for col in table.schema.columns}
+            for col_name in explicit_columns:
+                if col_name not in schema_column_names:
+                    raise ValueError(f"Column '{col_name}' does not exist in table '{stmt.table}'")
+
+            # Agregar valores NULL para columnas no especificadas
+            for col in table.schema.columns:
+                if col.name not in mapped_values:
+                    # Verificar si es primary key (no puede ser NULL)
+                    if col.primary_key:
+                        raise ValueError(
+                            f"Primary key column '{col.name}' cannot be NULL. "
+                            f"Please specify a value."
+                        )
+                    # Agregar NULL para columnas opcionales
+                    if col.nullable:
+                        mapped_values[col.name] = None
+                    else:
+                        # Si no es nullable y no tiene valor, error
+                        raise ValueError(
+                            f"Column '{col.name}' is NOT NULL but no value was provided"
+                        )
+
+            print(f"🔍 INSERT mapped_values (con columnas): {mapped_values}")
+
+        elif "__positional__" in stmt.values:
+            # Caso: INSERT INTO tabla VALUES (val1, val2, ...)
+            print(f"🔍 INSERT sin columnas explícitas (orden schema)")
+            print(f"🔍 INSERT valores posicionales: {positional_values}")
+
+            column_names = [col.name for col in table.schema.columns]
+
+            # Validar longitudes
+            if len(positional_values) != len(column_names):
+                raise ValueError(
+                    f"Expected {len(column_names)} values for columns {column_names}, "
+                    f"got {len(positional_values)}"
+                )
+
+            # Mapear en orden del schema
+            mapped_values = {
+                col_name: val
+                for col_name, val in zip(column_names, positional_values)
+            }
+
+            print(f"🔍 INSERT mapped_values (sin columnas): {mapped_values}")
+        else:
+            # Caso legacy: valores ya vienen como diccionario
+            print(f"🔍 INSERT valores como diccionario: {stmt.values}")
+            mapped_values = stmt.values
+
+        # Debug de tipos (especialmente para ARRAY_FLOAT)
+        for key, value in mapped_values.items():
+            print(f"🔍 INSERT {key}: valor={value}, tipo={type(value)}")
+
+        # Insertar el registro
+        rid = table.insert(mapped_values)
+
+        return {"ok": True, "rid": list(rid) if isinstance(rid, tuple) else rid}
 
     def execute_delete(self, plan: Plan, stmt: DeleteStmt) -> Dict[str, Any]:
         table = self.db.get_table(stmt.table)
@@ -119,6 +199,8 @@ class QueryExecutor:
         if t == 'VARCHAR':
             return ColumnType.VARCHAR
         if t == 'ARRAY' and (c.inner_type or '').upper() == 'FLOAT':
+            return ColumnType.ARRAY_FLOAT
+        if t == 'ARRAY_FLOAT':  # ← AGREGAR ESTA LÍNEA
             return ColumnType.ARRAY_FLOAT
         # fallback
         return ColumnType.VARCHAR
