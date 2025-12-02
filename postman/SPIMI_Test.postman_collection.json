@@ -109,6 +109,34 @@
         "header": [ { "key": "Authorization", "value": "Bearer {{auth_token}}" } ],
         "url": { "raw": "{{baseUrl}}/users/{{user}}/databases/{{db}}/tables/{{table}}/spimi/search?query=pollo&k=5", "host": ["{{baseUrl}}"], "path": ["users","{{user}}","databases","{{db}}","tables","{{table}}","spimi","search"], "query": [ { "key": "query", "value": "pollo" }, { "key": "k", "value": "5" } ] }
       }
+    },
+    {
+      "name": "8 - SQL full-text (via /query)",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{auth_token}}" } ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sql\": \"SELECT id, name, description FROM {{table}} WHERE description @@ 'pollo' LIMIT 10\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": { "raw": "{{baseUrl}}/users/{{user}}/databases/{{db}}/query", "host": ["{{baseUrl}}"], "path": ["users","{{user}}","databases","{{db}}","query"] }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "var jsonData = pm.response.json();",
+              "pm.test('Query returned rows', function() { pm.expect(jsonData.count || jsonData.rows.length).to.be.above(0); });",
+              "pm.test('First description contains pollo', function() { var rows = jsonData.rows || []; pm.expect(rows.length).to.be.above(0); pm.expect(rows[0].description.toLowerCase()).to.include('pollo'); });",
+              "pm.test('First row has rid and score', function() { var rows = jsonData.rows || []; pm.expect(rows.length).to.be.above(0); pm.expect(rows[0]).to.have.property('rid'); pm.expect(rows[0]).to.have.property('score'); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "response": []
     }
   ],
   "variable": [

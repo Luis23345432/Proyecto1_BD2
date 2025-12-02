@@ -68,10 +68,14 @@ class QueryExecutor:
                         page_str, slot_str = docid.split("_")
                         rid = (int(page_str), int(slot_str))
                         rec = table.fetch_by_rid(rid)
-                        rec['_score'] = float(score)
+                        # Build a result object including score and rid
+                        out_rows.append({
+                            "rid": [rid[0], rid[1]],
+                            "score": float(score),
+                            "record": rec,
+                        })
                     except Exception:
-                        rec = {}
-                    out_rows.append(rec)
+                        out_rows.append({"rid": None, "score": float(score), "record": {}})
                 rows = out_rows
         else:
             # FULL_TABLE_SCAN
@@ -86,9 +90,36 @@ class QueryExecutor:
                     page = table.datafile.read_page(pid)
                     out.extend(page.iter_records())
                 rows = out
+        # If full select and rows are SPIMI objects with 'record', flatten them
+        if stmt.columns == ['*']:
+            flattened = []
+            for r in rows:
+                if isinstance(r, dict) and 'record' in r:
+                    rec = r.get('record', {})
+                    rec['rid'] = r.get('rid')
+                    rec['score'] = r.get('score')
+                    flattened.append(rec)
+                else:
+                    flattened.append(r)
+            rows = flattened
+
         if stmt.columns != ['*']:
             # project only selected columns
-            rows = [{k: r.get(k) for k in stmt.columns} for r in rows]
+            projected_rows = []
+            for r in rows:
+                # If r was produced by SPIMI (has 'record'), extract underlying record
+                if isinstance(r, dict) and 'record' in r:
+                    rec = r.get('record', {})
+                    proj = {k: rec.get(k) for k in stmt.columns}
+                    # keep rid/score if present
+                    if 'rid' in r:
+                        proj['rid'] = r['rid']
+                    if 'score' in r:
+                        proj['score'] = r['score']
+                    projected_rows.append(proj)
+                else:
+                    projected_rows.append({k: r.get(k) for k in stmt.columns})
+            rows = projected_rows
         return {"rows": rows, "count": len(rows)}
 
     def execute_insert(self, stmt: InsertStmt) -> Dict[str, Any]:
