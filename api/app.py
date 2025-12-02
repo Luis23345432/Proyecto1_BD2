@@ -10,6 +10,7 @@ from .tables import router as tables_router
 from .records import router as records_router
 from .sql import router as sql_router
 from .csv_import import router as import_router
+from .spimi import router as spimi_router
 
 
 def create_app() -> FastAPI:
@@ -40,6 +41,7 @@ def create_app() -> FastAPI:
     app.include_router(records_router)
     app.include_router(sql_router)
     app.include_router(import_router)
+    app.include_router(spimi_router)
 
     @app.get("/healthz")
     def healthz():

@@ -1,0 +1,121 @@
+{
+  "info": {
+    "name": "SPIMI Index Flow - Proyecto BD2",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "spimi-flow-001"
+  },
+  "item": [
+    {
+      "name": "1 - Register user",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"demo\",\n  \"password\": \"demo_pass\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/users/register",
+          "host": ["{{baseUrl}}"],
+          "path": ["users","register"]
+        }
+      }
+    },
+    {
+      "name": "2 - Login (get token)",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"demo\",\n  \"password\": \"demo_pass\"\n}"
+        },
+        "url": { "raw": "{{baseUrl}}/users/login", "host": ["{{baseUrl}}"], "path": ["users","login"] }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const json = pm.response.json();",
+              "pm.environment.set('auth_token', json.access_token);",
+              "pm.environment.set('user', 'demo');",
+              "pm.environment.set('db', 'demo_db');",
+              "pm.environment.set('table', 'Restaurantes');"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "3 - Create database & table (create db)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{auth_token}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"{{db}}\"\n}"
+        },
+        "url": { "raw": "{{baseUrl}}/users/{{user}}/databases", "host": ["{{baseUrl}}"], "path": ["users","{{user}}","databases"] }
+      }
+    },
+    {
+      "name": "4 - Create table (schema)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{auth_token}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"{{table}}\",\n  \"columns\": [\n    { \"name\": \"id\", \"type\": \"INT\", \"nullable\": false, \"primary_key\": true },\n    { \"name\": \"name\", \"type\": \"VARCHAR\", \"length\": 128 },\n    { \"name\": \"description\", \"type\": \"VARCHAR\", \"length\": 512 }\n  ],\n  \"indexes\": [\n    { \"type\": \"FULLTEXT\", \"column\": \"description\" }\n  ]\n}"
+        },
+        "url": { "raw": "{{baseUrl}}/users/{{user}}/databases/{{db}}/tables", "host": ["{{baseUrl}}"], "path": ["users","{{user}}","databases","{{db}}","tables"] }
+      }
+    },
+    {
+      "name": "5 - Upload CSV (bulk insert)",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Authorization", "value": "Bearer {{auth_token}}" } ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            { "key": "file", "type": "file", "src": "postman/restaurantes.csv" }
+          ]
+        },
+        "url": { "raw": "{{baseUrl}}/users/{{user}}/databases/{{db}}/tables/{{table}}/load-csv?bulk=true", "host": ["{{baseUrl}}"], "path": ["users","{{user}}","databases","{{db}}","tables","{{table}}","load-csv"], "query": [ { "key": "bulk", "value": "true" } ] }
+      }
+    },
+    {
+      "name": "6 - Build SPIMI index",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Authorization", "value": "Bearer {{auth_token}}" } ],
+        "url": { "raw": "{{baseUrl}}/users/{{user}}/databases/{{db}}/tables/{{table}}/spimi/build?column=description&block_max_docs=200", "host": ["{{baseUrl}}"], "path": ["users","{{user}}","databases","{{db}}","tables","{{table}}","spimi","build"], "query": [ { "key": "column", "value": "description" }, { "key": "block_max_docs", "value": "200" } ] }
+      }
+    },
+    {
+      "name": "7 - SPIMI search (top-k)",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{auth_token}}" } ],
+        "url": { "raw": "{{baseUrl}}/users/{{user}}/databases/{{db}}/tables/{{table}}/spimi/search?query=pollo&k=5", "host": ["{{baseUrl}}"], "path": ["users","{{user}}","databases","{{db}}","tables","{{table}}","spimi","search"], "query": [ { "key": "query", "value": "pollo" }, { "key": "k", "value": "5" } ] }
+      }
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://127.0.0.1:8000" },
+    { "key": "auth_token", "value": "" },
+    { "key": "user", "value": "demo" },
+    { "key": "db", "value": "demo_db" },
+    { "key": "table", "value": "Restaurantes" }
+  ]
+}

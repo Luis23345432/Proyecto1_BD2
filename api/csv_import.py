@@ -8,6 +8,8 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, Depends, Query
 
 from .auth import get_current_user
 from engine import DatabaseEngine
+from indexes.spimi import build_spimi_blocks, merge_blocks
+import shutil
 
 router = APIRouter(prefix="/users/{user_id}/databases/{db_name}/tables/{table_name}", tags=["import"])
 
@@ -91,6 +93,53 @@ async def load_csv(
         if bulk:
             rids = table.insert_bulk(rows, rebuild_indexes=True)
             inserted = len(rids)
+            # After bulk insert + index rebuild, also build SPIMI indexes for FULLTEXT columns
+            try:
+                # detect fulltext columns
+                ft_cols = [c for c, t in table.schema.indexes.items() if t.name.lower() in ("fulltext", "inverted")]
+                if ft_cols:
+                    for col in ft_cols:
+                        block_dir = os.path.join(table.base_dir, f"spimi_blocks_{col}")
+                        index_dir = os.path.join(table.base_dir, f"spimi_index_{col}")
+                        os.makedirs(block_dir, exist_ok=True)
+                        os.makedirs(index_dir, exist_ok=True)
+
+                        # iterate records from datafile
+                        try:
+                            pc = table.datafile.page_count()
+                        except Exception:
+                            pc = 0
+
+                        def doc_iter():
+                            for pid in range(pc):
+                                page = table.datafile.read_page(pid)
+                                records = page.iter_records()
+                                for slot, rec in enumerate(records):
+                                    rid = (pid, slot)
+                                    text = rec.get(col)
+                                    if text is None:
+                                        continue
+                                    yield (text, rid)
+
+                        total_docs = build_spimi_blocks(doc_iter(), block_dir, block_max_docs=200, do_stem=True)
+                        merge_blocks(block_dir, index_dir, total_docs=total_docs)
+                        # Also create a canonical `spimi_index` path (used by the API search endpoint)
+                        canonical_index = os.path.join(table.base_dir, "spimi_index")
+                        try:
+                            # remove previous canonical index if exists
+                            if os.path.exists(canonical_index):
+                                shutil.rmtree(canonical_index)
+                            shutil.copytree(index_dir, canonical_index)
+                        except Exception:
+                            # non-fatal: log and continue
+                            import traceback
+                            print("⚠️ Warning: couldn't copy SPIMI index to canonical path:")
+                            traceback.print_exc()
+            except Exception:
+                # Don't fail the CSV upload if SPIMI build fails; log for debugging
+                import traceback
+                print("⚠️ Error building SPIMI index:")
+                traceback.print_exc()
         else:
             inserted = 0
             for row in rows:

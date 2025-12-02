@@ -235,4 +235,55 @@ python benchmarks/benchmark_basic.py
 
 Los resultados quedan en `benchmarks/out/` (CSV/JSON y gráficos si `matplotlib` está instalado).
 
+## Nuevas características implementadas (Full-Text / SPIMI / Stemming)
+
+Añadido soporte completo para búsqueda full-text e índice invertido en memoria secundaria, incluyendo:
+
+- `FULLTEXT` / InvertedIndex:
+	- Nuevo `IndexType.FULLTEXT` y la clase `indexes.InvertedIndex` para indexado por términos.
+	- Tokenización robusta: normalización Unicode (quita diacríticos), lowercase, filtrado de stopwords y tokens cortos.
+	- Soporte opcional de stemming usando `snowballstemmer` (si está instalado). Si no está, hay un fallback ligero.
+	- Persistencia de índices invertidos en JSON con metadata `_meta: {"do_stem": true|false}` para compatibilidad.
+
+- Integración en `storage/table.py`:
+	- Las columnas con índice `FULLTEXT` crean un `InvertedIndex(do_stem=True)` por defecto.
+	- El índice se reconstruye en `build_indexes_from_datafile()` y se actualiza en inserciones (insert/incremental y bulk).
+
+- SPIMI (Single-Pass In-Memory Indexing) para índices en memoria secundaria:
+	- Módulo `indexes/spimi.py` con:
+		- `build_spimi_blocks(...)`: genera bloques SPIMI (term -> postings) desde documentos.
+		- `merge_blocks(...)`: fusiona bloques y escribe archivos por término (`index_dir/terms/<term>.json`) y `meta.json` con `N` y `doc_norms`.
+		- `search_topk(...)`: busca top-k por similitud coseno leyendo únicamente las postings de los términos de la consulta.
+	- Los archivos por término usan nombres seguros (URL-quoted) para soportar caracteres/acento.
+	- TF-IDF usado: tf = 1 + log(tf), idf = log((N+1)/df) (suavizado) y norma del documento precomputada para coseno.
+
+- Endpoints API añadidos:
+	- `POST /users/{user}/databases/{db}/tables/{table}/spimi/build?column=description` → construye SPIMI desde los datos de la tabla.
+	- `GET  /users/{user}/databases/{db}/tables/{table}/spimi/search?query=...&k=...` → devuelve top-k resultados ordenados por `score` (coseno) y el `record` completo.
+	- Tras `POST /.../load-csv?bulk=true` la API ahora **construye automáticamente** índices SPIMI para columnas `FULLTEXT` y crea una ruta canónica `spimi_index/` en el directorio de la tabla (para compatibilidad con los endpoints).
+
+- Colección Postman para pruebas:
+	- Se añadió `postman/SPIMI_Test.postman_collection.json` con un flujo completo: register → login (captura token) → crear DB → crear tabla (schema con `FULLTEXT`) → subir CSV (bulk) → build SPIMI (automático) → SPIMI search.
+
+Cómo probar rápidamente (resumen)
+1. Instala deps y arranca el servidor:
+```powershell
+python -m pip install -r requirements.txt
+uvicorn api.app:app --reload --host 127.0.0.1 --port 8000
+```
+2. En Postman importa `postman/SPIMI_Test.postman_collection.json` y ejecuta los pasos en orden.
+3. Tras subir el CSV en modo `bulk=true` el backend reconstruirá índices y generará `spimi_index/` en la carpeta de la tabla.
+4. Llama a `/spimi/search?query=...&k=...` para obtener resultados con `score` y `record`.
+
+Notas y consideraciones
+- Compatibilidad: la búsqueda incluye fallbacks (normalized / non-normalized, stemmed / unstemmed) para empatar índices antiguos sin necesidad de reindexar inmediatamente; aun así, para obtener resultados consistentes con stemming es recomendable reconstruir el índice (`bulk` o `spimi/build`).
+- Escalabilidad: la implementación SPIMI actual escribe bloques en JSON y los fusiona en memoria; para colecciones grandes se recomienda adaptar `merge_blocks` para hacer un merge en streaming controlando buffers (MergeBlocks con B buffers). Puedo añadir esa versión si la necesitas para el informe.
+- Logs y debugging: durante `load-csv?bulk=true` y `spimi/build` se imprimen trazas sobre el número de documentos y estado del merge; revisa la consola del servidor para confirmar `meta.json` y archivos de términos.
+
+Si quieres, puedo:
+- añadir un endpoint que haga `export_table_to_spimi_docs` + `spimi/build` en una sola llamada; o
+- mejorar `merge_blocks` para respetar memoria limitada y documentar MergeBlocks con gráficos para tu informe.
+
+*** Fin de las notas añadidas ***
+
 
