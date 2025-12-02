@@ -33,7 +33,37 @@ class SPIMIIndexer:
         self.num_documents = 0
         self.num_blocks = 0
         self.doc_lengths = {}
+        self.doc_ids = {}  # Mapeo de ID numérico a ID original
         self.df = defaultdict(int)  # Document frequency global
+        
+        # Para construcción incremental
+        self.merged_index = None
+    
+    def _cleanup_old_files(self):
+        """Limpia archivos de construcciones anteriores"""
+        if not os.path.exists(self.output_dir):
+            return
+        
+        print("🧹 Limpiando archivos anteriores...")
+        files_to_remove = [
+            'final_index.pkl',
+            'doc_norms.pkl',
+            'doc_ids.pkl',
+            'idf_scores.pkl',
+            'term_to_block.pkl',
+            'index_info.pkl'
+        ]
+        
+        # Eliminar archivos específicos
+        for filename in files_to_remove:
+            filepath = os.path.join(self.output_dir, filename)
+            if os.path.exists(filepath):
+                os.remove(filepath)
+        
+        # Eliminar bloques antiguos
+        for filename in os.listdir(self.output_dir):
+            if filename.startswith('block_') and filename.endswith('.pkl'):
+                os.remove(os.path.join(self.output_dir, filename))
     
     def build_index(self, document_iterator: Iterator[Tuple[str, List[str]]]) -> str:
         """
@@ -48,6 +78,9 @@ class SPIMIIndexer:
         print("\n" + "=" * 60)
         print("🔨 INICIANDO CONSTRUCCIÓN SPIMI")
         print("=" * 60)
+        
+        # Limpiar archivos antiguos
+        self._cleanup_old_files()
         
         # Fase 1: Construir bloques locales
         block_files = self._build_blocks(document_iterator)
@@ -75,6 +108,9 @@ class SPIMIIndexer:
         docs_in_block = 0
         
         for doc_id, tokens in document_iterator:
+            # Guardar mapeo de doc_id
+            self.doc_ids[self.num_documents] = doc_id
+            
             self.num_documents += 1
             self.doc_lengths[doc_id] = len(tokens)
             
@@ -92,7 +128,7 @@ class SPIMIIndexer:
                 }
                 
                 # Estimar tamaño (aproximado)
-                current_size += len(term) + len(doc_id) + 24  # overhead
+                current_size += len(term) + len(str(doc_id)) + 24  # overhead
             
             docs_in_block += 1
             
@@ -141,10 +177,20 @@ class SPIMIIndexer:
         """
         print(f"\n🔀 Fase 2: Merging {len(block_files)} bloques...")
         
+        final_path = os.path.join(self.output_dir, "final_index.pkl")
+        
         if len(block_files) == 1:
             # Un solo bloque, no hay nada que mergear
-            final_path = os.path.join(self.output_dir, "final_index.pkl")
+            # Eliminar final_index.pkl si existe
+            if os.path.exists(final_path):
+                os.remove(final_path)
+            
             os.rename(block_files[0], final_path)
+            
+            # Cargar para tenerlo en memoria
+            with open(final_path, 'rb') as f:
+                self.merged_index = pickle.load(f)
+            
             return final_path
         
         # Abrir todos los bloques
@@ -189,12 +235,15 @@ class SPIMIIndexer:
                 # Este bloque se terminó
                 pass
         
+        # Convertir defaultdict a dict normal
+        self.merged_index = {term: dict(postings) for term, postings in merged_index.items()}
+        
         # Guardar índice merged
         final_path = os.path.join(self.output_dir, "final_index.pkl")
         with open(final_path, 'wb') as f:
-            pickle.dump(dict(merged_index), f)
+            pickle.dump(self.merged_index, f)
         
-        print(f"✅ Merge completado: {len(merged_index)} términos únicos")
+        print(f"✅ Merge completado: {len(self.merged_index)} términos únicos")
         
         # Eliminar bloques temporales
         for block_file in block_files:
@@ -209,14 +258,15 @@ class SPIMIIndexer:
         """
         print(f"\n🔢 Fase 3: Calculando TF-IDF...")
         
-        # Cargar índice
-        with open(index_path, 'rb') as f:
-            index = pickle.load(f)
+        # Usar el índice en memoria si está disponible
+        if self.merged_index is None:
+            with open(index_path, 'rb') as f:
+                self.merged_index = pickle.load(f)
         
         # Calcular TF-IDF para cada término en cada documento
         doc_norms = defaultdict(float)
         
-        for term, postings in index.items():
+        for term, postings in self.merged_index.items():
             df = len(postings)
             idf = math.log10(self.num_documents / df) if df > 0 else 0
             
@@ -237,9 +287,10 @@ class SPIMIIndexer:
         
         # Guardar índice con TF-IDF y metadatos
         final_data = {
-            'index': index,
+            'index': self.merged_index,
             'doc_norms': doc_norms,
             'doc_lengths': self.doc_lengths,
+            'doc_ids': self.doc_ids,
             'num_documents': self.num_documents,
             'df': dict(self.df)
         }
@@ -248,6 +299,110 @@ class SPIMIIndexer:
             pickle.dump(final_data, f)
         
         print(f"✅ TF-IDF calculado para {len(doc_norms)} documentos")
+    
+    # ========================================================================
+    # MÉTODOS NUEVOS PARA BÚSQUEDA
+    # ========================================================================
+    
+    def finalize_for_search(self):
+        """
+        Finaliza el índice para búsqueda eficiente.
+        Genera archivos auxiliares necesarios para cosine_search.py
+        """
+        try:
+            from spimi_helpers import finalize_index_for_search
+        except ImportError:
+            print("⚠️  spimi_helpers.py no encontrado")
+            print("   Creando versión simplificada...")
+            self._finalize_simple()
+            return
+        
+        print("\n🔧 Preparando índice para búsqueda...")
+        
+        # Verificar que tenemos el índice merged
+        if self.merged_index is None:
+            merged_path = os.path.join(self.output_dir, 'final_index.pkl')
+            if os.path.exists(merged_path):
+                print(f"📂 Cargando índice desde {merged_path}")
+                with open(merged_path, 'rb') as f:
+                    data = pickle.load(f)
+                    if isinstance(data, dict) and 'index' in data:
+                        self.merged_index = data['index']
+                    else:
+                        self.merged_index = data
+            else:
+                raise FileNotFoundError("No se encontró el índice merged")
+        
+        # Finalizar con el helper
+        finalize_index_for_search(
+            merged_index=self.merged_index,
+            doc_ids=self.doc_ids,
+            total_docs=self.num_documents,
+            output_dir=self.output_dir,
+            block_size=1000
+        )
+        
+        print("✅ Índice listo para búsqueda")
+    
+    def _finalize_simple(self):
+        """Versión simplificada sin spimi_helpers"""
+        print("  Guardando metadatos básicos...")
+        
+        # Cargar índice si es necesario
+        final_path = os.path.join(self.output_dir, 'final_index.pkl')
+        with open(final_path, 'rb') as f:
+            data = pickle.load(f)
+        
+        # Extraer componentes
+        if isinstance(data, dict) and 'index' in data:
+            index = data['index']
+            doc_norms = data['doc_norms']
+            doc_ids = data['doc_ids']
+        else:
+            print("⚠️  Estructura de índice no reconocida")
+            return
+        
+        # Guardar metadatos
+        with open(os.path.join(self.output_dir, 'doc_norms.pkl'), 'wb') as f:
+            pickle.dump(doc_norms, f)
+        
+        with open(os.path.join(self.output_dir, 'doc_ids.pkl'), 'wb') as f:
+            pickle.dump(doc_ids, f)
+        
+        # Calcular IDF
+        idf_scores = {}
+        for term, postings in index.items():
+            df = len(postings)
+            idf_scores[term] = math.log10(self.num_documents / df) if df > 0 else 0
+        
+        with open(os.path.join(self.output_dir, 'idf_scores.pkl'), 'wb') as f:
+            pickle.dump(idf_scores, f)
+        
+        print("  ✓ Metadatos guardados")
+    
+    def build_complete_index(self, document_generator):
+        """
+        Construye el índice completo incluyendo preparación para búsqueda.
+        
+        Args:
+            document_generator: Generador de (doc_id, tokens)
+        """
+        print("="*80)
+        print("CONSTRUCCIÓN COMPLETA DEL ÍNDICE SPIMI")
+        print("="*80)
+        
+        # Construir índice normal
+        final_path = self.build_index(document_generator)
+        
+        # Finalizar para búsqueda
+        print("\n3️⃣ Finalizando para búsqueda...")
+        self.finalize_for_search()
+        
+        print("\n" + "="*80)
+        print("✅ ÍNDICE COMPLETO CONSTRUIDO Y LISTO")
+        print("="*80)
+        
+        return final_path
 
 
 def load_spimi_index(index_path: str):
@@ -269,50 +424,109 @@ def load_spimi_index(index_path: str):
     )
 
 
+# ============================================================================
+# MAIN - EJEMPLO DE USO
+# ============================================================================
+
 if __name__ == "__main__":
-    print("=" * 60)
-    print("PRUEBA DE SPIMI")
-    print("=" * 60)
+    from preprocessor import TextPreprocessor
+    import csv
     
-    # Simular un dataset grande con generador
+    print("="*80)
+    print("CONSTRUCCIÓN DEL ÍNDICE SPIMI CON SOPORTE DE BÚSQUEDA")
+    print("="*80)
+    
+    # Obtener rutas absolutas
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(current_dir)  # Un nivel arriba de text_search
+    
+    output_dir = os.path.join(project_root, 'data', 'spimi_blocks')
+    dataset_path = os.path.join(project_root, 'datasets', 'spotify_songs.csv')
+    
+    print(f"\n📁 Directorio del proyecto: {project_root}")
+    print(f"📁 Directorio de salida: {output_dir}")
+    print(f"📁 Dataset: {dataset_path}")
+    
+    # Inicializar
+    indexer = SPIMIIndexer(output_dir=output_dir, block_size_mb=1)
+    preprocessor = TextPreprocessor()
+    
+    # Función generadora de documentos
     def document_generator():
-        """Genera documentos de ejemplo"""
-        lyrics = [
-            "amor corazon sentimiento vida",
-            "amor pasion fuego corazon",
-            "ciudad noche luz calle",
-            "amor dolor lagrimas vida",
-            "corazon roto dolor tristeza",
-            "baile fiesta alegria musica",
-            "amor eterno siempre juntos",
-            "ciudad gris lluvia melancolia"
+        """
+        Generador que lee tu dataset y produce (doc_id, tokens)
+        """
+        
+        if not os.path.exists(dataset_path):
+            print(f"⚠️  Dataset no encontrado: {dataset_path}")
+            print("   Usando datos de ejemplo...")
+            
+            # Datos de ejemplo si no existe el dataset
+            examples = [
+                ("song_1", "amor corazon sentimiento vida"),
+                ("song_2", "amor pasion fuego corazon"),
+                ("song_3", "ciudad noche luz calle"),
+                ("song_4", "amor dolor lagrimas vida"),
+                ("song_5", "corazon roto dolor tristeza"),
+            ]
+            
+            for doc_id, text in examples:
+                tokens = preprocessor.preprocess(text)
+                yield doc_id, tokens
+            
+            return
+        
+        # Leer dataset real
+        try:
+            with open(dataset_path, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                
+                for i, row in enumerate(reader):
+                    doc_id = f"song_{i}"
+                    
+                    # Concatenar campos textuales
+                    text = f"{row.get('track_name', '')} {row.get('track_artist', '')} {row.get('lyrics', '')}"
+                    
+                    # Preprocesar
+                    tokens = preprocessor.preprocess(text)
+                    
+                    yield doc_id, tokens
+                    
+                    # Mostrar progreso
+                    if (i + 1) % 1000 == 0:
+                        print(f"  Procesados: {i + 1} documentos")
+                    
+                    # Limitar para pruebas (quitar este if para procesar todo)
+                    if i >= 10000:  # Solo 10k documentos para prueba
+                        break
+                        
+        except Exception as e:
+            print(f"❌ Error leyendo dataset: {e}")
+            return
+    
+    # Construir índice completo
+    try:
+        indexer.build_complete_index(document_generator())
+        
+        print("\n✅ Construcción exitosa!")
+        print(f"📁 Archivos generados en: {indexer.output_dir}")
+        
+        # Verificar archivos
+        required_files = [
+            'final_index.pkl',
+            'doc_norms.pkl',
+            'doc_ids.pkl', 
+            'idf_scores.pkl',
         ]
         
-        # Simular 1000 documentos
-        for i in range(1000):
-            doc_id = f"song_{i}"
-            tokens = lyrics[i % len(lyrics)].split()
-            yield doc_id, tokens
-    
-    # Construir índice con SPIMI
-    indexer = SPIMIIndexer(output_dir='data/spimi_blocks', block_size_mb=1)
-    index_path = indexer.build_index(document_generator())
-    
-    # Cargar índice
-    print("\n📂 Cargando índice construido...")
-    index, doc_norms, doc_lengths, num_docs, df = load_spimi_index(index_path)
-    
-    print(f"\n📊 Estadísticas finales:")
-    print(f"  • Documentos: {num_docs}")
-    print(f"  • Términos únicos: {len(index)}")
-    print(f"  • Término más frecuente: {max(df.items(), key=lambda x: x[1])}")
-    
-    # Ejemplo de búsqueda en término
-    term = 'amor'
-    if term in index:
-        print(f"\n🔍 Posting list de '{term}':")
-        print(f"  • Aparece en {len(index[term])} documentos")
-        for doc_id, data in list(index[term].items())[:5]:
-            print(f"    - {doc_id}: TF={data['tf']}, TF-IDF={data['tfidf']:.4f}")
-    
-    print("\n" + "=" * 60)
+        print("\n📋 Verificación de archivos:")
+        for filename in required_files:
+            path = os.path.join(indexer.output_dir, filename)
+            exists = "✓" if os.path.exists(path) else "✗"
+            size_mb = os.path.getsize(path) / (1024*1024) if os.path.exists(path) else 0
+            print(f"  {exists} {filename:<25} {size_mb:>8.2f} MB")
+        
+    except Exception as e:
+        print(f"\n❌ Error durante la construcción: {str(e)}")
+        import traceback
+        traceback.print_exc()
