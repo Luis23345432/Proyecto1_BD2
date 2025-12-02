@@ -17,15 +17,17 @@ class SPIMIIndexer:
     en bloques cuando la RAM es limitada
     """
     
-    def __init__(self, output_dir: str, block_size_mb: int = 100):
+    def __init__(self, output_dir: str, block_size_mb: int = 100, language: str = 'english'):
         """
         Args:
             output_dir: Directorio donde se guardarán los bloques
             block_size_mb: Tamaño máximo de cada bloque en MB
+            language: Idioma para el preprocesamiento
         """
         self.output_dir = output_dir
         self.block_size_mb = block_size_mb
         self.block_size_bytes = block_size_mb * 1024 * 1024
+        self.language = language
         
         os.makedirs(self.output_dir, exist_ok=True)
         
@@ -377,6 +379,15 @@ class SPIMIIndexer:
         
         with open(os.path.join(self.output_dir, 'idf_scores.pkl'), 'wb') as f:
             pickle.dump(idf_scores, f)
+        
+        # Guardar información del índice (incluyendo idioma)
+        info = {
+            'total_documents': self.num_documents,
+            'total_terms': len(index),
+            'language': self.language
+        }
+        with open(os.path.join(self.output_dir, 'index_info.pkl'), 'wb') as f:
+            pickle.dump(info, f)
         
         print("  ✓ Metadatos guardados")
     

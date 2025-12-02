@@ -18,10 +18,18 @@ from text_search.preprocessor import TextPreprocessor
 class SearchTester:
     """Clase para probar el sistema de búsqueda"""
     
-    def __init__(self, index_dir: str = 'data/spimi_blocks'):
+    def __init__(self, index_dir: str = 'data/spimi_blocks', language: str = None):
         self.index_dir = index_dir
-        self.preprocessor = TextPreprocessor()
+        
+        # Intentar detectar idioma del índice
+        if language is None:
+            language = self._detect_language()
+        
+        self.preprocessor = TextPreprocessor(language=language)
         self.searcher = None
+        
+        # Cargar metadata de documentos (si existe)
+        self.doc_metadata = self._load_metadata()
         
         # Verificar que el índice existe
         if not self._verify_index():
@@ -30,6 +38,40 @@ class SearchTester:
         # Inicializar searcher
         self.searcher = CosineSearch(index_dir=index_dir)
         print(f"✓ Buscador inicializado con índice de {index_dir}")
+        print(f"✓ Idioma: {language}")
+        if self.doc_metadata:
+            print(f"✓ Metadata cargada: {len(self.doc_metadata)} documentos")
+    
+    def _detect_language(self) -> str:
+        """Detecta el idioma del índice desde metadatos"""
+        info_path = os.path.join(self.index_dir, 'index_info.pkl')
+        if os.path.exists(info_path):
+            try:
+                import pickle
+                with open(info_path, 'rb') as f:
+                    info = pickle.load(f)
+                    return info.get('language', 'english')
+            except:
+                pass
+        return 'english'  # Default
+    
+    def _load_metadata(self):
+        """Carga metadata de documentos (nombres, datos originales)"""
+        metadata_path = os.path.join(self.index_dir, 'doc_metadata.pkl')
+        if os.path.exists(metadata_path):
+            try:
+                import pickle
+                with open(metadata_path, 'rb') as f:
+                    return pickle.load(f)
+            except Exception as e:
+                print(f"⚠️  No se pudo cargar metadata: {e}")
+        return {}
+    
+    def _get_doc_name(self, doc_id: str) -> str:
+        """Obtiene el nombre legible de un documento"""
+        if self.doc_metadata and doc_id in self.doc_metadata:
+            return self.doc_metadata[doc_id]['name']
+        return doc_id  # Fallback al ID si no hay metadata
     
     def _verify_index(self) -> bool:
         """Verifica que existan los archivos necesarios"""
@@ -73,8 +115,9 @@ class SearchTester:
         if show_details and results:
             print(f"\n📄 Top-{min(k, len(results))} Documentos:")
             for i, (doc_id, score) in enumerate(results, 1):
-                print(f"  {i}. Doc: {doc_id}")
-                print(f"     Score: {score:.4f} ({score*100:.2f}%)")
+                doc_name = self._get_doc_name(doc_id)
+                print(f"  {i}. {doc_name}")
+                print(f"     ID: {doc_id} | Score: {score:.4f} ({score*100:.2f}%)")
         
         return results, elapsed_ms
     
