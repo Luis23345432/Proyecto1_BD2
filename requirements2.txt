@@ -1,0 +1,30 @@
+# Dependencias para Proyecto 2 - Text Search & Multimedia
+
+# Text Processing
+nltk==3.8.1              # Tokenización, stopwords, stemming
+scikit-learn==1.3.2      # TF-IDF, cosine similarity
+
+# Multimedia Processing
+opencv-python==4.8.1.78  # SIFT, feature extraction para imágenes
+Pillow==10.1.0           # Manejo de imágenes
+librosa==0.10.1          # Extracción de características de audio (MFCC)
+soundfile==0.12.1        # Lectura de archivos de audio
+
+# Machine Learning
+numpy==1.24.3            # Operaciones numéricas
+scipy==1.11.4            # Distancias y operaciones científicas
+
+# Clustering para Codebook
+scikit-learn             # Ya incluido arriba (K-Means)
+
+# PostgreSQL comparison
+psycopg2-binary==2.9.9   # Para comparar con PostgreSQL
+pgvector                 # Extensión de vectores para PostgreSQL
+
+# Plotting (para gráficas de resultados)
+matplotlib==3.8.2
+pandas==2.1.4
+
+# Opcional: Deep Learning para descriptores más avanzados
+# torch==2.1.1           # PyTorch (solo si usas ResNet50/Inception)
+# torchvision==0.16.1    # Modelos pre-entrenados
