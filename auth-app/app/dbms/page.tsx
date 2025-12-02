@@ -10,6 +10,7 @@ import { DatabaseSelector } from "@/components/database-selector";
 import { CreateDatabaseModal } from "@/components/create-database-modal";
 import { TablesSelector } from "@/components/tables-selector";
 import { QueryResults } from "@/components/query-results";
+import { PaginatedTableViewer } from "@/components/paginated-table-viewer";
 import { CSVImportModal } from "@/components/csv-import-modal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,8 @@ export default function DBMSManagerPage() {
   const [queryResults, setQueryResults] = useState<any | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
   const [queryError, setQueryError] = useState<string | null>(null);
+  const [queryLimit, setQueryLimit] = useState<number>(100);
+  const [queryOffset, setQueryOffset] = useState<number>(0);
   const [tablesRefreshKey, setTablesRefreshKey] = useState(0);
   const [isCSVModalOpen, setIsCSVModalOpen] = useState(false);
 
@@ -99,12 +102,12 @@ export default function DBMSManagerPage() {
     setIsExecuting(true);
     setQueryError(null);
     try {
-      const results = await executeQuery(
-        userId,
-        token,
-        selectedDatabase,
-        queryInput
-      );
+      // reset pagination on new execution
+      const results = await executeQuery(userId, token, selectedDatabase, queryInput, {
+        limit: queryLimit,
+        offset: 0,
+      });
+      setQueryOffset(0);
       setQueryResults(results);
 
       if (queryInput.trim().toUpperCase().startsWith("CREATE TABLE")) {
@@ -114,6 +117,25 @@ export default function DBMSManagerPage() {
       console.error("[v0] Error executing query:", err);
       setQueryError(err.error?.detail || "Failed to execute query");
       setQueryResults(null);
+    } finally {
+      setIsExecuting(false);
+    }
+  };
+
+  const loadQueryPage = async (nextOffset: number) => {
+    if (!queryInput.trim() || !selectedDatabase || !userId || !token) return;
+    setIsExecuting(true);
+    setQueryError(null);
+    try {
+      const results = await executeQuery(userId, token, selectedDatabase, queryInput, {
+        limit: queryLimit,
+        offset: nextOffset,
+      });
+      setQueryOffset(nextOffset);
+      setQueryResults(results);
+    } catch (err: any) {
+      console.error("[v0] Error executing query page:", err);
+      setQueryError(err.error?.detail || "Failed to execute query");
     } finally {
       setIsExecuting(false);
     }
@@ -225,6 +247,15 @@ export default function DBMSManagerPage() {
                       token={token}
                       dbName={selectedDatabase}
                     />
+                    <div className="mt-4">
+                      <label className="block text-sm font-medium text-ebony mb-2">Browse Records (paginado)</label>
+                      <PaginatedTableViewer
+                        userId={userId}
+                        token={token}
+                        dbName={selectedDatabase}
+                        initialTableName={"Products"}
+                      />
+                    </div>
                   </div>
 
                   {/* Query Input */}
@@ -239,7 +270,19 @@ export default function DBMSManagerPage() {
                       placeholder="Enter your query here... (Press Shift+Enter to execute)"
                       className="w-full h-32 p-4 border border-timberwolf rounded-lg bg-white text-ebony placeholder-davys-gray focus:outline-none focus:ring-2 focus:ring-cambridge-blue resize-none"
                     />
-                    <div className="mt-2 flex gap-2">
+                    <div className="mt-2 flex gap-2 items-center flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-davys-gray">Page size</span>
+                        <select
+                          value={queryLimit}
+                          onChange={(e) => setQueryLimit(Number(e.target.value))}
+                          className="px-3 py-2 border rounded-lg"
+                        >
+                          <option value={25}>25</option>
+                          <option value={50}>50</option>
+                          <option value={100}>100</option>
+                        </select>
+                      </div>
                       <Button
                         onClick={handleExecuteQuery}
                         disabled={isExecuting || !queryInput.trim()}
@@ -270,6 +313,30 @@ export default function DBMSManagerPage() {
                     <label className="block text-sm font-medium text-ebony mb-2">
                       Query Results
                     </label>
+                    {/* Pager for SQL results */}
+                    {typeof queryResults?.count === 'number' && queryResults?.rows && (
+                      <div className="mb-3 flex items-center justify-between p-2 rounded-lg" style={{ backgroundColor: "#f1f2eb" }}>
+                        <div className="text-sm" style={{ color: "#566246" }}>
+                          Rows: {queryResults.rows.length} / Total: {queryResults.count} • Offset: {queryOffset} • Exec: {queryResults.execution_time_ms?.toFixed?.(2)} ms
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            onClick={() => loadQueryPage(Math.max(0, queryOffset - queryLimit))}
+                            disabled={isExecuting || queryOffset <= 0}
+                            className="bg-cambridge-blue hover:bg-ebony text-alabaster font-medium disabled:opacity-50"
+                          >
+                            Prev
+                          </Button>
+                          <Button
+                            onClick={() => loadQueryPage(queryOffset + queryLimit)}
+                            disabled={isExecuting || (queryResults.count != null && (queryOffset + queryLimit >= queryResults.count))}
+                            className="bg-cambridge-blue hover:bg-ebony text-alabaster font-medium disabled:opacity-50"
+                          >
+                            Next
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                     <QueryResults response={queryResults} />
                   </div>
                 )}

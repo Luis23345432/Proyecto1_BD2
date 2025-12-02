@@ -98,23 +98,44 @@ def list_records(
     if t is None:
         raise HTTPException(status_code=404, detail="Table not found")
 
-    # full scan (simple)
-    out: List[Dict[str, Any]] = []
+    # Escaneo eficiente: evitar construir toda la lista en memoria.
+    rows: List[Dict[str, Any]] = []
+    total_count = 0
     pc = t.datafile.page_count()
+    skipped = 0
+
     for pid in range(pc):
-        stats.inc("disk.reads")  # ← Contar cada lectura de página
+        stats.inc("disk.reads")
         page = t.datafile.read_page(pid)
-        out.extend(page.iter_records())
+        recs = page.iter_records()
+        page_len = len(recs)
+        total_count += page_len
+
+        # Si aún no alcanzamos el offset, saltar páginas completas
+        if skipped + page_len <= offset:
+            skipped += page_len
+            continue
+
+        # Comenzar dentro de la página en el punto de offset
+        start_idx = max(0, offset - skipped)
+        for r in recs[start_idx:]:
+            rows.append(r)
+            if len(rows) >= limit:
+                break
+
+        skipped += page_len
+        if len(rows) >= limit:
+            break
 
     execution_time_ms = (time.perf_counter() - start_time) * 1000
 
     return {
-        "rows": out[offset: offset + limit],
-        "count": len(out),
+        "rows": rows,
+        "count": total_count,
         "execution_time_ms": round(execution_time_ms, 2),
         "metrics": {
             "page_scans": pc,
-            "disk_reads": pc  # Full scan = leer todas las páginas
+            "disk_reads": pc,
         }
     }
 

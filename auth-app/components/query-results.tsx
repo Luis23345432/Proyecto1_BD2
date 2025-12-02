@@ -30,6 +30,9 @@ interface QueryResultsProps {
         }
       >
     }
+    truncated?: boolean
+    shown_rows?: number
+    original_count?: number
   }
 }
 
@@ -53,6 +56,12 @@ export function QueryResults({ response }: QueryResultsProps) {
 
     return (
       <div className="space-y-4">
+        {response.truncated && (
+          <div className="p-3 rounded-lg text-sm" style={{ backgroundColor: "#fff4e5", color: "#8a5600", border: "1px solid #e8c08b" }}>
+            Mostrando {response.shown_rows} de {response.original_count} filas (resultado truncado para evitar bloqueo del navegador).
+            Usa el panel "Browse Records" para paginar toda la tabla.
+          </div>
+        )}
         <div
           className="overflow-x-auto overflow-y-auto border rounded-lg"
           style={{ borderColor: "#d8dad3", maxHeight: "400px" }}
@@ -93,6 +102,11 @@ export function QueryResults({ response }: QueryResultsProps) {
           style={{ backgroundColor: "#f1f2eb", color: "#566246" }}
         >
           <div className="text-sm font-medium">Total Rows: {response.count}</div>
+          {response.truncated && (
+            <div className="text-xs" style={{ color: "#8a5600" }}>
+              Truncado a {response.shown_rows} filas
+            </div>
+          )}
           <div className="flex gap-2">
             {totalIndexTime > 0 && (
               <button

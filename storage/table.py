@@ -1,4 +1,5 @@
 from __future__ import annotations
+from disk_manager import PAGE_SIZE_DEFAULT
 
 import os
 import json
@@ -17,10 +18,12 @@ from metrics import stats
 
 
 class Table:
-    def __init__(self, base_dir: str, schema: TableSchema, page_size: int = 4096):
+    def __init__(self, base_dir: str, schema: TableSchema, page_size: int | None = None):
+        if page_size is None:
+            page_size = PAGE_SIZE_DEFAULT
         self.base_dir = os.path.abspath(base_dir)
         self.schema = schema
-        self.page_size = page_size
+        self.page_size = int(page_size)
         os.makedirs(self.base_dir, exist_ok=True)
         self.data_path = os.path.join(self.base_dir, "data.dat")
         self.schema_path = os.path.join(self.base_dir, "schema.json")

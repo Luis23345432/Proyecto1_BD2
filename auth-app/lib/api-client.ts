@@ -196,8 +196,20 @@ export async function getTables(userId: string, token: string, dbName: string): 
   return response.json()
 }
 
-export async function executeQuery(userId: string, token: string, dbName: string, sql: string): Promise<QueryResponse> {
-  const response = await fetch(`${BASE_URL}/users/${userId}/databases/${dbName}/query`, {
+export async function executeQuery(
+  userId: string,
+  token: string,
+  dbName: string,
+  sql: string,
+  options?: { limit?: number; offset?: number },
+): Promise<QueryResponse> {
+  const params = new URLSearchParams()
+  if (options?.limit != null) params.set("limit", String(options.limit))
+  if (options?.offset != null) params.set("offset", String(options.offset))
+  const qs = params.toString()
+  const url = `${BASE_URL}/users/${userId}/databases/${dbName}/query${qs ? `?${qs}` : ""}`
+
+  const response = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -241,6 +253,37 @@ export async function uploadCSV(
       status: response.status,
       error,
     }
+  }
+
+  return response.json()
+}
+
+// Fetch paginated table records from backend list endpoint
+export async function getTableRecords(
+  userId: string,
+  token: string,
+  dbName: string,
+  tableName: string,
+  limit: number,
+  offset: number,
+): Promise<{
+  rows: Record<string, any>[]
+  count: number
+  execution_time_ms: number
+  metrics: { page_scans: number; disk_reads: number }
+}> {
+  const url = `${BASE_URL}/users/${userId}/databases/${dbName}/tables/${tableName}/records?limit=${limit}&offset=${offset}`
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+  })
+
+  if (!response.ok) {
+    const error: ApiError = await response.json()
+    throw { status: response.status, error }
   }
 
   return response.json()
