@@ -25,24 +25,32 @@ class IndexType(Enum):
     FULLTEXT = auto()
 
 
-def _to_int(v: Any) -> int:
+def _to_int(v: Any) -> Optional[int]:
+    """Convierte un valor a INT, retorna None si está vacío"""
     if v is None or v == "":
-        raise ValueError("valor INT vacío")
-    return int(v)
+        return None  # ← Cambiado: retornar None en lugar de lanzar excepción
+    try:
+        return int(float(v))  # float() primero para manejar "42.0"
+    except (ValueError, TypeError):
+        raise ValueError(f"No se puede convertir '{v}' a INT")
 
 
-def _to_float(v: Any) -> float:
+def _to_float(v: Any) -> Optional[float]:
+    """Convierte un valor a FLOAT, retorna None si está vacío"""
     if v is None or v == "":
-        raise ValueError("valor FLOAT vacío")
+        return None  # ← Cambiado: retornar None en lugar de lanzar excepción
     if isinstance(v, str):
         v = v.replace(",", ".")
-    return float(v)
+    try:
+        return float(v)
+    except (ValueError, TypeError):
+        raise ValueError(f"No se puede convertir '{v}' a FLOAT")
 
 
-def _to_date(v: Any) -> str:
-    # retorna ISO (YYYY-MM-DD)
+def _to_date(v: Any) -> Optional[str]:
+    """Convierte un valor a DATE (formato YYYY-MM-DD), retorna None si está vacío"""
     if v is None or v == "":
-        raise ValueError("valor DATE vacío")
+        return None  # ← Cambiado: retornar None en lugar de lanzar excepción
     if isinstance(v, datetime):
         return v.strftime("%Y-%m-%d")
     s = str(v).strip()
@@ -55,6 +63,7 @@ def _to_date(v: Any) -> str:
 
 
 def _to_varchar(v: Any, max_len: Optional[int]) -> str:
+    """Convierte un valor a VARCHAR con longitud máxima opcional"""
     s = "" if v is None else str(v)
     if max_len is not None and max_len > 0:
         return s[:max_len]
@@ -62,6 +71,7 @@ def _to_varchar(v: Any, max_len: Optional[int]) -> str:
 
 
 def _to_array_float(v: Any) -> List[float]:
+    """Convierte un valor a lista de floats"""
     # CRÍTICO: NO llamar a str() si ya es lista
     if v is None:
         return []
@@ -97,6 +107,7 @@ def _to_array_float(v: Any) -> List[float]:
 
 
 def convert_value(col_type: ColumnType, value: Any, *, max_len: Optional[int] = None) -> Any:
+    """Convierte un valor al tipo de columna especificado"""
     if col_type == ColumnType.INT:
         return _to_int(value)
     if col_type == ColumnType.FLOAT:

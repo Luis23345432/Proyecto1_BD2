@@ -24,22 +24,49 @@ def _verify_user_access(user_id: str, current_user: str = Depends(get_current_us
 
 
 def _parse_csv_value(value: str, column_type: str) -> Any:
-    value = value.strip()
+    # Manejar None PRIMERO antes de cualquier conversión
+    if value is None:
+        return None
+    
+    # Convertir a string y limpiar
+    value = str(value).strip()
+    
+    # Valores comunes de NULL o vacíos
+    if value == '' or value.upper() in ('NA', 'N/A', 'NULL', 'NONE'):
+        return None
 
     # Arrays (para RTree): "[12.07, -77.05]" o "12.07, -77.05"
     if column_type == 'ARRAY_FLOAT' or column_type.startswith('ARRAY'):
-        # Remover corchetes si existen
         value = value.strip('[]')
-        # Split por comas y convertir a float
         try:
-            return [float(x.strip()) for x in value.split(',')]
+            return [float(x.strip()) for x in value.split(',') if x.strip()]
         except ValueError as e:
             raise ValueError(f"Cannot parse array value '{value}': {e}")
-
-    # Para otros tipos, retornar el string tal cual
-    # (el sistema de tipos de la tabla lo convertirá)
+    
+    # Fechas - normalizar a formato YYYY-MM-DD
+    if column_type == 'DATE':
+        if len(value) == 4 and value.isdigit():
+            return f"{value}-01-01"
+        elif len(value) == 7 and value.count('-') == 1:
+            return f"{value}-01"
+        return value
+    
+    # MANEJAR INT
+    if column_type == 'INT':
+        try:
+            return int(float(value))
+        except (ValueError, TypeError):
+            return None
+    
+    # MANEJAR FLOAT
+    if column_type == 'FLOAT':
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            return None
+    
+    # Para otros tipos (VARCHAR, TEXT), retornar el string tal cual
     return value
-
 
 @router.post("/load-csv")
 async def load_csv(
