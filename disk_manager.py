@@ -7,7 +7,7 @@ import struct
 from typing import Any, List, Tuple
 
 
-PAGE_SIZE_DEFAULT = 4096
+PAGE_SIZE_DEFAULT = 16384
 
 # Contadores de I/O (globales del módulo)
 disk_reads: int = 0

@@ -83,6 +83,8 @@ def create_table(
                         schema.add_column(Column(idx.column, ColumnType.ARRAY_FLOAT, nullable=True))
                         added_cols.add(idx.column)
                 schema.add_index(idx.column, IndexType.RTREE)
+            elif t in ("FULLTEXT", "INVERTED", "TEXT"):
+                schema.add_index(idx.column, IndexType.FULLTEXT)
             else:
                 schema.add_index(idx.column, IndexType.BTREE)
 

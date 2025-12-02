@@ -1,4 +1,5 @@
 from __future__ import annotations
+from disk_manager import PAGE_SIZE_DEFAULT
 
 import os
 import json
@@ -7,7 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from core.schema import TableSchema
 from core.types import convert_value
 from core.records import Record
-from indexes import BPlusTree
+from indexes import BPlusTree, InvertedIndex
 from indexes.ISAM import ISAM
 from indexes.AVL import AVL
 from indexes.ExtHashing import ExtHashing
@@ -17,10 +18,12 @@ from metrics import stats
 
 
 class Table:
-    def __init__(self, base_dir: str, schema: TableSchema, page_size: int = 4096):
+    def __init__(self, base_dir: str, schema: TableSchema, page_size: int | None = None):
+        if page_size is None:
+            page_size = PAGE_SIZE_DEFAULT
         self.base_dir = os.path.abspath(base_dir)
         self.schema = schema
-        self.page_size = page_size
+        self.page_size = int(page_size)
         os.makedirs(self.base_dir, exist_ok=True)
         self.data_path = os.path.join(self.base_dir, "data.dat")
         self.schema_path = os.path.join(self.base_dir, "schema.json")
@@ -52,6 +55,8 @@ class Table:
                         idx_obj = ISAM.load_idx(idx_path)
                     elif idx_type.name.lower() == 'hash':
                         idx_obj = ExtHashing.load_idx(idx_path)
+                    elif idx_type.name.lower() in ('fulltext', 'inverted'):
+                        idx_obj = InvertedIndex.load_idx(idx_path)
                     elif idx_type.name.lower() == 'rtree':
                         idx_obj = RTreeIndex.load_idx(idx_path)
                     else:
@@ -74,6 +79,9 @@ class Table:
                     idx_obj = ExtHashing(is_clustered=is_clustered)
                 elif idx_type.name.lower() == 'rtree':
                     idx_obj = RTreeIndex(dimensions=self._infer_dimensions_for(col_name))
+                elif idx_type.name.lower() in ('fulltext', 'inverted'):
+                    # Create inverted index with stemming enabled (robust)
+                    idx_obj = InvertedIndex(do_stem=True)
                 else:
                     idx_obj = AVL(is_clustered=is_clustered)
 
@@ -141,6 +149,21 @@ class Table:
                         idx.add(key, rid)
                 print(f"✅ RTree construido para '{col_name}' con {len(all_records)} registros")
 
+            elif idx_type in ('fulltext', 'inverted'):
+                # Índice invertido / full-text
+                pairs = []
+                for rid, rec_dict in all_records:
+                    key = rec_dict.get(col_name)
+                    if key is not None:
+                        pairs.append((key, rid))
+
+                if pairs:
+                    print(f"🔨 Construyendo InvertedIndex para '{col_name}' con {len(pairs)} documentos...")
+                    idx.build_from_pairs(pairs)
+                    print(f"✅ InvertedIndex construido para '{col_name}' (terms={len(idx.get_terms())})")
+                else:
+                    print(f"⚠️ No hay datos para InvertedIndex en '{col_name}'")
+
             else:
                 # Otros índices (AVL, Hash)
                 for rid, rec_dict in all_records:
@@ -204,6 +227,9 @@ class Table:
                                 if isinstance(key, str):
                                     parts = [p.strip() for p in key.split(',')]
                                     key = [float(p) for p in parts]
+                            tree.add(key, rid)
+                        elif isinstance(tree, InvertedIndex):
+                            # Texto -> tokenizar dentro del índice
                             tree.add(key, rid)
                         else:
                             # BTree, ISAM, AVL, Hash

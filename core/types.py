@@ -22,6 +22,7 @@ class IndexType(Enum):
     SEQUENTIAL = auto()
     HASH = auto()
     RTREE = auto()
+    FULLTEXT = auto()
 
 
 def _to_int(v: Any) -> int:

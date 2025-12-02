@@ -1,286 +1,6 @@
 {
 	"info": {
-		"_postman_id": "77fe680c-4f11-4d36-b6a9-4f66bcedef63",
-		"name": "Proyecto BD2 API",
-		"description": "Colección para probar el backend FastAPI del Proyecto BD2: usuarios, bases de datos, tablas, registros, SQL (DDL), RTREE espacial y carga CSV.",
-		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-		"_exporter_id": "34047895"
-	},
-	"item": [
-		{
-			"name": "Health",
-			"item": [
-				{
-					"name": "GET /healthz",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{baseUrl}}/healthz",
-							"host": [
-								"{{baseUrl}}"
-							],
-							"path": [
-								"healthz"
-							]
-						}
-					},
-					"response": []
-				}
-			]
-		},
-		{
-			"name": "Users",
-			"item": [
-				{
-					"name": "POST /users (create user)",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"user_id\": \"{{userId}}\"\n}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
-						},
-						"url": {
-							"raw": "{{baseUrl}}/users",
-							"host": [
-								"{{baseUrl}}"
-							],
-							"path": [
-								"users"
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "GET /users (list)",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{baseUrl}}/users",
-							"host": [
-								"{{baseUrl}}"
-							],
-							"path": [
-								"users"
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "GET /users/{user_id}",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{baseUrl}}/users/{{userId}}",
-							"host": [
-								"{{baseUrl}}"
-							],
-							"path": [
-								"users",
-								"{{userId}}"
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "register",
-					"request": {
-						"method": "POST",
-						"header": [],
-						"body": {
-							"mode": "raw",
-							"raw": "{\r\n\"username\": \"juan2\",\r\n \"password\": \"123456\"\r\n}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
-						},
-						"url": {
-							"raw": "{{baseUrl}}/users/register",
-							"host": [
-								"{{baseUrl}}"
-							],
-							"path": [
-								"users",
-								"register"
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "login",
-					"request": {
-						"method": "POST",
-						"header": [],
-						"body": {
-							"mode": "raw",
-							"raw": "{\"username\": \"juan2\", \"password\": \"123456\"}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
-						},
-						"url": {
-							"raw": "http://localhost:8000/users/login",
-							"protocol": "http",
-							"host": [
-								"localhost"
-							],
-							"port": "8000",
-							"path": [
-								"users",
-								"login"
-							]
-						}
-					},
-					"response": []
-				}
-			]
-		},
-		{
-			"name": "Databases",
-			"item": [
-				{
-					"name": "POST /databases (create)",
-					"request": {
-						"auth": {
-							"type": "bearer",
-							"bearer": [
-								{
-									"key": "token",
-									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJqdWFuMiIsImV4cCI6MTc2MDg5NDg4MH0.bXcp9cw3pCZ2iL2GZvFftnggCpKi0QbOFNYW-6M3R6w",
-									"type": "string"
-								}
-							]
-						},
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"name\": \"{{dbName}}2\"\n}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
-						},
-						"url": {
-							"raw": "{{baseUrl}}/users/{{userId}}/databases",
-							"host": [
-								"{{baseUrl}}"
-							],
-							"path": [
-								"users",
-								"{{userId}}",
-								"databases"
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "GET /databases (list)",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{baseUrl}}/users/{{userId}}/databases",
-							"host": [
-								"{{baseUrl}}"
-							],
-							"path": [
-								"users",
-								"{{userId}}",
-								"databases"
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "GET /databases/{db_name}",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}",
-							"host": [
-								"{{baseUrl}}"
-							],
-							"path": [
-								"users",
-								"{{userId}}",
-								"databases",
-								"{{dbName}}"
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "DELETE /databases/{db_name}",
-					"request": {
-						"method": "DELETE",
-						"header": [],
-						"url": {
-							"raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}",
-							"host": [
-								"{{baseUrl}}"
-							],
-							"path": [
-								"users",
-								"{{userId}}",
-								"databases",
-								"{{dbName}}"
-							]
-						}
-					},
-					"response": []
-				}
-			]
-		},
-		{
-			"name": "Tables",
-			"item": [
-				{
-					"name": "POST /tables (create: people)",
-					"request": {
-						"auth": {
-							"type": "bearer",
-							"bearer": [
-								{
-									"key": "token",
-									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJqdWFuMiIsImV4cCI6MTc2MDg5NDg4MH0.bXcp9cw3pCZ2iL2GZvFftnggCpKi0QbOFNYW-6M3R6w",
-									"type": "string"
-								}
-							]
-						},
-						"method": "POST",
-						"header": [
+		{"info":{"_postman_id":"77fe680c-4f11-4d36-b6a9-4f66bcedef63","name":"Proyecto BD2 API - FullText","description":"Colección mínima para probar full-text (índice invertido): registro/login, crear BD, crear tabla FULLTEXT, cargar CSV y buscar.","schema":"https://schema.getpostman.com/json/collection/v2.1.0/collection.json","_exporter_id":"34047895"},"item":[{"name":"Health","item":[{"name":"GET /healthz","request":{"method":"GET","header":[],"url":{"raw":"{{baseUrl}}/healthz","host":["{{baseUrl}}"],"path":["healthz"]}},"response":[]}]},{"name":"Users","item":[{"name":"register","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\n  \"username\": \"{{userId}}\",\n  \"password\": \"secret123\"\n}","options":{"raw":{"language":"json"}}},"url":{"raw":"{{baseUrl}}/users/register","host":["{{baseUrl}}"],"path":["users","register"]}},"response":[]},{"name":"login","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"username\": \"{{userId}}\", \"password\": \"secret123\"}","options":{"raw":{"language":"json"}}},"url":{"raw":"{{baseUrl}}/users/login","host":["{{baseUrl}}"],"path":["users","login"]}},"response":[]}]},{"name":"Databases","item":[{"name":"POST /databases (create)","request":{"auth":{"type":"bearer","bearer":[{"key":"token","value":"","type":"string"}]},"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\n  \"name\": \"{{dbName}}\"\n}","options":{"raw":{"language":"json"}}},"url":{"raw":"{{baseUrl}}/users/{{userId}}/databases","host":["{{baseUrl}}"],"path":["users","{{userId}}","databases"]}},"response":[]}]},{"name":"Tables","item":[{"name":"POST /tables (create: restaurants FULLTEXT)","request":{"auth":{"type":"bearer","bearer":[{"key":"token","value":"","type":"string"}]},"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\n  \"name\": \"{{restaurantsTable}}\",\n  \"columns\": [\n    { \"name\": \"id\", \"type\": \"INT\", \"nullable\": false, \"primary_key\": true },\n    { \"name\": \"name\", \"type\": \"VARCHAR\", \"length\": 128 },\n    { \"name\": \"description\", \"type\": \"VARCHAR\", \"length\": 512 }\n  ],\n  \"indexes\": [\n    { \"type\": \"FULLTEXT\", \"column\": \"description\" }\n  ]\n}","options":{"raw":{"language":"json"}}},"url":{"raw":"{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/tables","host":["{{baseUrl}}"],"path":["users","{{userId}}","databases","{{dbName}}","tables"]}},"response":[]},{"name":"POST /tables/{table_name}/load-csv (upload restaurantes.csv)","request":{"auth":{"type":"bearer","bearer":[{"key":"token","value":"","type":"string"}]},"method":"POST","header":[],"body":{"mode":"formdata","formdata":[{"key":"file","type":"file","src":"restaurantes.csv"}],"options":{}},"url":{"raw":"{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/tables/{{restaurantsTable}}/load-csv?bulk=true","host":["{{baseUrl}}"],"path":["users","{{userId}}","databases","{{dbName}}","tables","{{restaurantsTable}}","load-csv"]}},"response":[]}]},{"name":"Records","item":[{"name":"GET /records/search (full-text)","request":{"auth":{"type":"bearer","bearer":[{"key":"token","value":"","type":"string"}]},"method":"GET","header":[],"url":{"raw":"{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/tables/{{restaurantsTable}}/records/search?column=description&key=pollo","host":["{{baseUrl}}"],"path":["users","{{userId}}","databases","{{dbName}}","tables","{{restaurantsTable}}","records","search"]}},"response":[]}] ]}
 							{
 								"key": "Content-Type",
 								"value": "application/json"
@@ -374,27 +94,144 @@
 									"key": "token",
 									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJqdWFuMiIsImV4cCI6MTc2MDg5NDg4MH0.bXcp9cw3pCZ2iL2GZvFftnggCpKi0QbOFNYW-6M3R6w",
 									"type": "string"
-								}
-							]
-						},
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/tables/{{tableName}}/schema",
-							"host": [
-								"{{baseUrl}}"
-							],
-							"path": [
-								"users",
-								"{{userId}}",
-								"databases",
-								"{{dbName}}",
-								"tables",
-								"{{tableName}}",
-								"schema"
-							]
-						}
-					},
+										{
+											"name": "GET /tables/{table_name}/stats",
+											"request": {
+												"method": "GET",
+												"header": [],
+												"url": {
+													"raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/tables/{{tableName}}/stats",
+													"host": [
+														"{{baseUrl}}"
+													],
+													"path": [
+														"users",
+														"{{userId}}",
+														"databases",
+														"{{dbName}}",
+														"tables",
+														"{{tableName}}",
+														"stats"
+													]
+													}
+											},
+											{
+												"name": "POST /tables (create: restaurants FULLTEXT)",
+												"request": {
+													"auth": {
+														"type": "bearer",
+														"bearer": [
+															{
+																"key": "token",
+																"value": "",
+																"type": "string"
+															}
+														]
+													},
+													"method": "POST",
+													"header": [
+														{
+															"key": "Content-Type",
+															"value": "application/json"
+														}
+													],
+													"body": {
+														"mode": "raw",
+														"raw": "{\n  \"name\": \"{{restaurantsTable}}\",\n  \"columns\": [\n    { \"name\": \"id\", \"type\": \"INT\", \"nullable\": false, \"primary_key\": true },\n    { \"name\": \"name\", \"type\": \"VARCHAR\", \"length\": 128 },\n    { \"name\": \"description\", \"type\": \"VARCHAR\", \"length\": 512 }\n  ],\n  \"indexes\": [\n    { \"type\": \"FULLTEXT\", \"column\": \"description\" }\n  ]\n}",
+														"options": {
+														"raw": {
+															"language": "json"
+														}
+													}
+													},
+													"url": {
+														"raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/tables",
+														"host": [
+															"{{baseUrl}}"
+														],
+														"path": [
+															"users",
+															"{{userId}}",
+															"databases",
+															"{{dbName}}",
+															"tables"
+														]
+													}
+											},
+											{
+												"name": "POST /tables/{table_name}/load-csv (upload restaurantes.csv)",
+												"request": {
+													"auth": {
+														"type": "bearer",
+														"bearer": [
+															{
+																"key": "token",
+																"value": "",
+																"type": "string"
+															}
+														]
+													},
+													"method": "POST",
+													"header": [],
+													"body": {
+														"mode": "formdata",
+														"formdata": [
+															{
+																"key": "file",
+																"type": "file",
+																"src": "restaurantes.csv"
+															}
+														],
+														"options": {}
+													},
+													"url": {
+														"raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/tables/{{restaurantsTable}}/load-csv?bulk=true",
+														"host": [
+															"{{baseUrl}}"
+														],
+														"path": [
+															"users",
+															"{{userId}}",
+															"databases",
+															"{{dbName}}",
+															"tables",
+															"{{restaurantsTable}}",
+															"load-csv"
+														]
+													}
+											},
+											{
+												"name": "GET /records/search (full-text)",
+												"request": {
+													"auth": {
+														"type": "bearer",
+														"bearer": [
+															{
+																"key": "token",
+																"value": "",
+																"type": "string"
+															}
+														]
+													},
+													"method": "GET",
+													"header": [],
+													"url": {
+														"raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/tables/{{restaurantsTable}}/records/search?column=description&key=pollo",
+														"host": [
+															"{{baseUrl}}"
+														],
+														"path": [
+															"users",
+															"{{userId}}",
+															"databases",
+															"{{dbName}}",
+															"tables",
+															"{{restaurantsTable}}",
+															"records",
+															"search"
+														]
+													}
+												}
 					"response": []
 				},
 				{
