@@ -39,6 +39,7 @@ class SelectStmt:
     condition: Optional[Condition] = None
     # Spatial extras (mutually exclusive with condition for simplicity)
     spatial: Optional[Dict[str, Any]] = None  # { kind: 'NEAR'|'KNN', column: str, center: [lat,lon], radius?: float, k?: int }
+    limit: Optional[int] = None
 
 
 @dataclass

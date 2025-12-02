@@ -184,10 +184,24 @@ class SQLParser:
                     v2 = self._parse_value()
                     condition = Condition(column=col, op='BETWEEN', value=v1, value2=v2)
                 else:
-                    self._eat('OP') if (t2 and t2.type == 'OP') else self._eat('PUNC', '=')
+                    # accept '=' or other operator like '@@'
+                    if t2 and t2.type == 'OP':
+                        op_tok = self._eat('OP')
+                        op_val = op_tok.value
+                    else:
+                        eq_tok = self._eat('PUNC', '=')
+                        op_val = eq_tok.value
                     v = self._parse_value()
-                    condition = Condition(column=col, op='=', value=v)
-        return SelectStmt(table=table, columns=cols, condition=condition, spatial=spatial)
+                    condition = Condition(column=col, op=op_val, value=v)
+        # Optionally parse LIMIT n
+        t = self._peek()
+        limit_val = None
+        if t and t.type == 'KW' and t.value == 'LIMIT':
+            self._eat('KW', 'LIMIT')
+            num_tok = self._eat('NUMBER')
+            limit_val = int(num_tok.value)
+
+        return SelectStmt(table=table, columns=cols, condition=condition, spatial=spatial, limit=limit_val)
 
     def _parse_insert(self) -> InsertStmt:
         self._eat('KW', 'INSERT')

@@ -1,3 +1,20 @@
+### Uso SQL: consulta full-text
+
+Puedes usar el operador `@@` en una cláusula WHERE para ejecutar búsquedas full-text contra una columna indexada con `FULLTEXT` (SPIMI / inverted index):
+
+Ejemplo:
+```sql
+SELECT title, artist, lyric
+FROM Audio
+WHERE lyric @@ 'amor en tiempos de guerra'
+LIMIT 10;
+```
+
+Comportamiento:
+- El parser reconoce `@@` como operador `OP` y el planner genera un plan `SPIMI_SEARCH` si la columna tiene un índice `FULLTEXT`.
+- El executor llamará a la implementación en `indexes/spimi.search_topk` para leer únicamente los postings de los términos y devolver los `k` mejores resultados por similitud coseno (TF-IDF). Si no existe un índice en disco, se caerá al `InvertedIndex` en memoria o a full scan.
+- El `LIMIT` se respeta y se usa como `k` para la búsqueda top-k.
+
 # Proyecto BD2 – Motor de BD + API + Frontend (Docker)
 
 Este proyecto implementa un pequeño motor de base de datos con índices, expuesto vía API FastAPI y un frontend Next.js para operar con SQL y CSV. Incluye despliegue con Docker Compose, soporte de múltiples tipos de índices (BTREE, ISAM, AVL, HASH, RTREE) y consultas espaciales por SQL.
@@ -256,6 +273,7 @@ Añadido soporte completo para búsqueda full-text e índice invertido en memori
 		- `search_topk(...)`: busca top-k por similitud coseno leyendo únicamente las postings de los términos de la consulta.
 	- Los archivos por término usan nombres seguros (URL-quoted) para soportar caracteres/acento.
 	- TF-IDF usado: tf = 1 + log(tf), idf = log((N+1)/df) (suavizado) y norma del documento precomputada para coseno.
+	- Merge multi-way con Priority Queue (heap): al fusionar bloques SPIMI se utiliza una cola de prioridad (heap) para realizar un merge multi-entrada eficiente por clave (término), reduciendo memoria intermedia y permitiendo un ordenamiento estable de términos.
 
 - Endpoints API añadidos:
 	- `POST /users/{user}/databases/{db}/tables/{table}/spimi/build?column=description` → construye SPIMI desde los datos de la tabla.

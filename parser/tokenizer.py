@@ -66,6 +66,12 @@ class SQLTokenizer:
                 tokens.append(Token("STRING", ''.join(val)))
                 i = j + 1
                 continue
+            # full-text operator '@@'
+            if ch == '@':
+                if i + 1 < N and s[i+1] == '@':
+                    tokens.append(Token('OP', '@@'))
+                    i += 2
+                    continue
             # number literal
             if ch.isdigit() or (ch == '.' and i + 1 < N and s[i+1].isdigit()):
                 j = i

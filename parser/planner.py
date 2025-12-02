@@ -24,6 +24,12 @@ class QueryPlanner:
         if table is None:
             raise ValueError("Tabla no existe")
         cond = stmt.condition
+        # SPIMI / full-text operator '@@' gets a dedicated plan if column is indexed for fulltext
+        if cond and cond.op == '@@' and cond.column in table.indexes:
+            # require table to have a fulltext index configured
+            idx_type = table.schema.indexes.get(cond.column).name.lower()
+            if idx_type in ('fulltext', 'inverted'):
+                return Plan(type='SPIMI_SEARCH', table=stmt.table, column=cond.column, condition=cond)
         if cond and cond.op in ('=', 'BETWEEN') and cond.column in table.indexes:
             return Plan(type='INDEX_SCAN', table=stmt.table, column=cond.column, condition=cond)
         return Plan(type='FULL_TABLE_SCAN', table=stmt.table, condition=cond)

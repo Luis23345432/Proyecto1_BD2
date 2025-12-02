@@ -4,6 +4,7 @@ import json
 import math
 import os
 import urllib.parse
+import heapq
 from typing import Dict, Iterable, List, Tuple, Any
 
 from .inverted_index import tokenize
@@ -90,56 +91,105 @@ def merge_blocks(block_dir: str, index_dir: str, total_docs: int | None = None) 
 
     # Gather block files
     block_files = [os.path.join(block_dir, f) for f in os.listdir(block_dir) if f.endswith('.json')]
-    term_acc: Dict[str, Dict[str, int]] = {}
+    if not block_files:
+        # nothing to merge
+        return
+    print(f"Merging {len(block_files)} block(s) from {block_dir} into {index_dir}")
 
-    # Read each block and accumulate per-term postings in temporary on-disk merges.
-    # For moderate sizes we can merge in-memory per-term; for larger we should stream.
+    # Build per-block sorted lists of (term, postings) and maintain an index per block
+    block_iters: List[Dict[str, Any]] = []
     for bf in block_files:
         with open(bf, 'r', encoding='utf-8') as f:
             data = json.load(f)
-        for term, posting_list in data.items():
-            acc = term_acc.setdefault(term, {})
-            for docid, tf in posting_list:
-                acc[docid] = acc.get(docid, 0) + int(tf)
+        items = list(data.items())
+        items.sort(key=lambda x: x[0])
+        block_iters.append({'items': items, 'idx': 0, 'file': bf})
 
-    # Write final per-term files
-    # compute N (total distinct docs) or use provided total_docs
+    # Initialize a heap with the first term from each block
+    heap: List[Tuple[str, int]] = []  # (term, block_idx)
+    for i, b in enumerate(block_iters):
+        if b['items']:
+            term0 = b['items'][0][0]
+            heapq.heappush(heap, (term0, i))
+
+    # Multi-way merge using a priority queue (min-heap) keyed by term
+    num_terms = 0
+    while heap:
+        term, bidx = heapq.heappop(heap)
+        # Aggregate postings for 'term' from any block that has it as current
+        agg: Dict[str, int] = {}
+
+        # process this block's current item
+        b = block_iters[bidx]
+        idx = b['idx']
+        t, postings = b['items'][idx]
+        assert t == term
+        for docid, tf in postings:
+            agg[docid] = agg.get(docid, 0) + int(tf)
+        # move iterator forward for this block and push next term
+        b['idx'] += 1
+        if b['idx'] < len(b['items']):
+            next_term = b['items'][b['idx']][0]
+            heapq.heappush(heap, (next_term, bidx))
+
+        # Now consume any other blocks that currently point at the same term
+        while heap and heap[0][0] == term:
+            _, other_bidx = heapq.heappop(heap)
+            ob = block_iters[other_bidx]
+            oidx = ob['idx']
+            ot, opostings = ob['items'][oidx]
+            assert ot == term
+            for docid, tf in opostings:
+                agg[docid] = agg.get(docid, 0) + int(tf)
+            ob['idx'] += 1
+            if ob['idx'] < len(ob['items']):
+                heapq.heappush(heap, (ob['items'][ob['idx']][0], other_bidx))
+
+        # write merged per-term file
+        safe_term = urllib.parse.quote_plus(term)
+        pf = os.path.join(terms_dir, f"{safe_term}.json")
+        posting_items = [[docid, tf] for docid, tf in sorted(agg.items())]
+        payload = {"df": len(agg), "postings": posting_items}
+        with open(pf, 'w', encoding='utf-8') as f:
+            json.dump(payload, f, ensure_ascii=False)
+        num_terms += 1
+
+    print(f"Merged {num_terms} terms. Computing doc norms and writing meta.json")
+    # At this point we've created per-term files; we need to compute doc norms and meta.
+    # If total_docs was provided, N = total_docs, else compute N by scanning per-term files
     if total_docs is None:
         docs_seen = set()
-        for term, postings in term_acc.items():
-            for docid in postings.keys():
+        for fname in os.listdir(terms_dir):
+            pf = os.path.join(terms_dir, fname)
+            with open(pf, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            for docid, tf in data.get('postings', []):
                 docs_seen.add(docid)
         N = len(docs_seen)
     else:
         N = int(total_docs)
 
-    for term, postings in term_acc.items():
-        # sanitize term for filename
-        safe_term = urllib.parse.quote_plus(term)
-        pf = os.path.join(terms_dir, f"{safe_term}.json")
-        # sort postings by docid for determinism
-        posting_items = [[docid, tf] for docid, tf in sorted(postings.items())]
-        payload = {"df": len(postings), "postings": posting_items}
-        with open(pf, 'w', encoding='utf-8') as f:
-            json.dump(payload, f, ensure_ascii=False)
-
-    # compute doc norms
-    # norm(doc) = sqrt(sum_t (tfidf_{t,d})^2) ; tfidf uses 1+log(tf) * idf (idf = log(N/df))
-    # Build a mapping docid -> sumsq
+    # Second pass: compute doc_norms by reading per-term files and computing tf-idf weights
     doc_sumsq: Dict[DocID, float] = {}
-    for term, postings in term_acc.items():
-        df = len(postings)
+    num_terms = 0
+    for fname in os.listdir(terms_dir):
+        pf = os.path.join(terms_dir, fname)
+        with open(pf, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        df = int(data.get('df', 0))
         if df == 0:
             continue
-        idf = math.log((N + 1) / df)  # smoothing
-        for docid, tf in postings.items():
-            tfw = 1.0 + math.log(float(tf)) if tf > 0 else 0.0
+        num_terms += 1
+        idf = math.log((N + 1) / df)
+        for docid, tf in data.get('postings', []):
+            tfv = int(tf)
+            tfw = 1.0 + math.log(float(tfv)) if tfv > 0 else 0.0
             w = tfw * idf
             doc_sumsq[docid] = doc_sumsq.get(docid, 0.0) + w * w
 
     doc_norms = {docid: math.sqrt(s) for docid, s in doc_sumsq.items()}
 
-    meta = {"N": N, "num_terms": len(term_acc), "doc_norms": doc_norms}
+    meta = {"N": N, "num_terms": num_terms, "doc_norms": doc_norms}
     with open(os.path.join(index_dir, 'meta.json'), 'w', encoding='utf-8') as f:
         json.dump(meta, f, ensure_ascii=False)
 

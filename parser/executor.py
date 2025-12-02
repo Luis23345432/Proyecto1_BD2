@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
+import os
+from indexes.spimi import search_topk
 
 from storage.database import Database
 from .planner import Plan
@@ -36,6 +38,41 @@ class QueryExecutor:
                 rows = table.search(plan.column or '', stmt.condition.value)
             else:
                 rows = table.range_search(plan.column or '', stmt.condition.value, stmt.condition.value2)
+        elif plan.type == 'SPIMI_SEARCH' and stmt.condition:
+            # Full-text search using SPIMI index files (on-disk index)
+            col = plan.column or stmt.condition.column
+            q = stmt.condition.value
+            k = stmt.limit or 10
+            # index dir choices: canonical 'spimi_index' or per-column 'spimi_index_<col>'
+            index_dir_candidates = [
+                os.path.join(table.base_dir, 'spimi_index'),
+                os.path.join(table.base_dir, f'spimi_index_{col}'),
+                os.path.join(table.base_dir, f'spimi_index_{col.lower()}'),
+            ]
+            index_dir = None
+            for cand in index_dir_candidates:
+                if os.path.exists(cand):
+                    index_dir = cand
+                    break
+            if index_dir is None:
+                # fallback: use in-memory InvertedIndex (no scoring)
+                print(f"⚠️ SPIMI index for column '{col}' not found on disk; using in-memory inverted index if available")
+                rows = table.search(col, q)
+            else:
+                print(f"🔍 SPIMI search: index_dir={index_dir}, query='{q}', k={k}")
+                results = search_topk(index_dir, q, k=int(k), do_stem=True)
+                print(f"🔍 SPIMI search returned {len(results)} results")
+                out_rows = []
+                for docid, score in results:
+                    try:
+                        page_str, slot_str = docid.split("_")
+                        rid = (int(page_str), int(slot_str))
+                        rec = table.fetch_by_rid(rid)
+                        rec['_score'] = float(score)
+                    except Exception:
+                        rec = {}
+                    out_rows.append(rec)
+                rows = out_rows
         else:
             # FULL_TABLE_SCAN
             rows = table.search(stmt.condition.column, stmt.condition.value) if stmt.condition and stmt.condition.op == '=' else []
@@ -163,6 +200,14 @@ class QueryExecutor:
             # If no explicit indexes, still suggest defaults
             if not schema.indexes:
                 schema.suggest_indexes()
+            # Also apply indexes provided via USING clause (if any)
+            if getattr(stmt, 'indexes', None):
+                for idx_type_name, col in stmt.indexes:
+                    try:
+                        idx_enum = self._map_index_type(idx_type_name)
+                        schema.add_index(col, idx_enum)
+                    except Exception as e:
+                        print(f"⚠️ Warning: couldn't add index {idx_type_name} on {col}: {e}")
         else:
             # Legacy path from earlier implementation
             if not stmt.indexes:
@@ -230,4 +275,6 @@ class QueryExecutor:
             return IndexType.HASH
         if up == 'RTREE':
             return IndexType.RTREE
+        if up == 'FULLTEXT':
+            return IndexType.FULLTEXT
         return IndexType.BTREE
