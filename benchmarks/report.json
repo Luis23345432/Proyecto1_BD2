@@ -1,0 +1,37 @@
+{
+  "text": [
+    {
+      "N": 1000,
+      "ms": 32.81,
+      "count": 8
+    },
+    {
+      "N": 2000,
+      "ms": 27.52,
+      "count": 8
+    },
+    {
+      "N": 4000,
+      "ms": 29.05,
+      "count": 8
+    }
+  ],
+  "multimedia_image": [
+    {
+      "N": 1000,
+      "ms_seq": 0.0,
+      "ms_inv": 0.0
+    },
+    {
+      "N": 2000,
+      "ms_seq": 0.0,
+      "ms_inv": 0.0
+    },
+    {
+      "N": 4000,
+      "ms_seq": 0.0,
+      "ms_inv": 0.0
+    }
+  ],
+  "notes": "Use pgVector/FAISS externally for PostgreSQL/ANN comparisons."
+}

@@ -1,0 +1,107 @@
+{
+  "info": {
+    "_postman_id": "bd2-fulltext-001",
+    "name": "Proyecto BD2 API - FullText",
+    "description": "Colección mínima para probar full-text (índice invertido): registro/login, crear BD, crear tabla FULLTEXT, cargar CSV y buscar.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /healthz",
+          "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/healthz", "host": ["{{baseUrl}}"], "path": ["healthz"] } },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "register",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"username\": \"{{userId}}\",\n  \"password\": \"secret123\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/users/register", "host": ["{{baseUrl}}"], "path": ["users", "register"] }
+          },
+          "response": []
+        },
+        {
+          "name": "login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"username\": \"{{userId}}\", \"password\": \"secret123\"}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/users/login", "host": ["{{baseUrl}}"], "path": ["users", "login"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Databases",
+      "item": [
+        {
+          "name": "POST /databases (create)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"{{dbName}}\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/users/{{userId}}/databases", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}", "databases"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Tables",
+      "item": [
+        {
+          "name": "POST /tables (create: restaurants FULLTEXT)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{restaurantsTable}}\",\n  \"columns\": [\n    { \"name\": \"id\", \"type\": \"INT\", \"nullable\": false, \"primary_key\": true },\n    { \"name\": \"name\", \"type\": \"VARCHAR\", \"length\": 128 },\n    { \"name\": \"description\", \"type\": \"VARCHAR\", \"length\": 512 }\n  ],\n  \"indexes\": [\n    { \"type\": \"FULLTEXT\", \"column\": \"description\" }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/tables", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}", "databases", "{{dbName}}", "tables"] }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /tables/{table_name}/load-csv (upload restaurantes.csv)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "", "type": "string" }] },
+            "method": "POST",
+            "header": [],
+            "body": { "mode": "formdata", "formdata": [ { "key": "file", "type": "file", "src": "restaurantes.csv" } ], "options": {} },
+            "url": { "raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/tables/{{restaurantsTable}}/load-csv?bulk=true", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}", "databases", "{{dbName}}", "tables", "{{restaurantsTable}}", "load-csv"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Records",
+      "item": [
+        {
+          "name": "GET /records/search (full-text)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/tables/{{restaurantsTable}}/records/search?column=description&key=pollo", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}", "databases", "{{dbName}}", "tables", "{{restaurantsTable}}", "records", "search"] }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

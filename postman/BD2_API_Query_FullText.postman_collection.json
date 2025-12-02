@@ -1,0 +1,236 @@
+{
+  "info": {
+    "_postman_id": "bd2-query-ft-001",
+    "name": "Proyecto BD2 - SQL Query FullText",
+    "description": "Colección para probar Full-Text Search usando `POST /users/{user}/databases/{db}/query` y pasos auxiliares.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://127.0.0.1:8000" },
+    { "key": "userId", "value": "testuser" },
+    { "key": "dbName", "value": "testdb" },
+    { "key": "tableName", "value": "Audio" },
+    { "key": "spimiColumn", "value": "lyric" },
+    { "key": "blockMaxDocs", "value": "200" },
+    { "key": "authToken", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Users / Auth",
+      "item": [
+        {
+          "name": "register",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{userId}}\",\n  \"password\": \"secret123\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/users/register", "host": ["{{baseUrl}}"], "path": ["users", "register"] }
+          },
+          "response": []
+        },
+        {
+            "name": "login (sets authToken)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"username\": \"{{userId}}\", \"password\": \"secret123\"}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/users/login", "host": ["{{baseUrl}}"], "path": ["users", "login"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData && (jsonData.access_token || jsonData[\"access_token\"])) {",
+                  "  pm.environment.set('authToken', jsonData.access_token || jsonData['access_token']);",
+                  "  console.log('Set authToken');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Databases & Tables",
+      "item": [
+        {
+          "name": "POST /databases (create)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"{{dbName}}\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/users/{{userId}}/databases", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}", "databases"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Create table via /query (FULLTEXT)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sql\": \"CREATE TABLE Audio (title VARCHAR, artist VARCHAR, lyric VARCHAR) USING INDEX FULLTEXT(lyric)\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/query", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}", "databases", "{{dbName}}", "query"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Insert sample rows via /query",
+      "item": [
+        {
+          "name": "INSERT 1",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"sql\": \"INSERT INTO Audio VALUES ('Amor y Paz', 'Grupo A', 'amor en tiempos de guerra y paz')\"}\n", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/query", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}", "databases", "{{dbName}}", "query"] }
+          },
+          "response": []
+        },
+        {
+          "name": "INSERT 2",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"sql\": \"INSERT INTO Audio VALUES ('Guerra', 'Grupo B', 'batallas y guerras, amor perdido')\"}\n", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/query", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}", "databases", "{{dbName}}", "query"] }
+          },
+          "response": []
+        },
+        {
+          "name": "INSERT 3",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"sql\": \"INSERT INTO Audio VALUES ('Canción de amor', 'Grupo C', 'amor en tiempos de guerra, sol y luna')\"}\n", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/query", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}", "databases", "{{dbName}}", "query"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Build SPIMI index (optional)",
+      "item": [
+        {
+          "name": "POST /spimi/build (lyric)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/tables/{{tableName}}/spimi/build?column={{spimiColumn}}&block_max_docs={{blockMaxDocs}}", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}", "databases", "{{dbName}}", "tables", "{{tableName}}", "spimi", "build"], "query": [ { "key": "column", "value": "{{spimiColumn}}" }, { "key": "block_max_docs", "value": "{{blockMaxDocs}}" } ] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Run full-text SELECT via /query",
+      "item": [
+        {
+          "name": "SELECT title, artist, lyric (no score)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"sql\": \"SELECT title, artist, lyric FROM Audio WHERE lyric @@ 'amor en tiempos de guerra' LIMIT 10\"}\n",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/query", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}", "databases", "{{dbName}}", "query"] }
+          },
+          "response": []
+        ,
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "pm.test('Query returned rows', function() { pm.expect(jsonData.count || jsonData.rows.length).to.be.above(0); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "SELECT * (includes _score)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"sql\": \"SELECT * FROM Audio WHERE lyric @@ 'amor en tiempos de guerra' LIMIT 10\"}\n",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/query", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}", "databases", "{{dbName}}", "query"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "pm.test('Query returned rows', function() { pm.expect(jsonData.count || jsonData.rows.length).to.be.above(0); });",
+                  "pm.test('First row contains _score', function() { var rows = jsonData.rows || []; pm.expect(rows.length).to.be.above(0); pm.expect(rows[0]._score).to.not.be.undefined; });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        }
+      ,
+      {
+        "name": "GET SPIMI /search (optional check)",
+        "request": {
+          "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }] },
+          "method": "GET",
+          "header": [],
+          "url": {
+            "raw": "{{baseUrl}}/users/{{userId}}/databases/{{dbName}}/tables/{{tableName}}/spimi/search?query=amor%20en%20tiempos%20de%20guerra&k=10",
+            "host": ["{{baseUrl}}"],
+            "path": ["users", "{{userId}}", "databases", "{{dbName}}", "tables", "{{tableName}}", "spimi", "search"],
+            "query": [
+              { "key": "query", "value": "amor en tiempos de guerra" },
+              { "key": "k", "value": "10" }
+            ]
+          }
+        },
+        "response": []
+      }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "exec": [],
+        "type": "text/javascript"
+      }
+    }
+  ]
+}

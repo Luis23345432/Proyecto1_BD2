@@ -1,0 +1,121 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Node / Next.js
+auth-app/node_modules/
+auth-app/.next/
+auth-app/.turbo/
+
+# VSCode
+.vscode/
+
+# Datasets (do not commit full datasets)
+datasets/
+data/datasets/
+data/users/
+
+# Multimedia generated artifacts (keep local only)
+data/multimedia/*
+!data/multimedia/.gitkeep
+data/multimedia/**/thumbnails/
+
+# Keep small samples
+!data/samples/**
+
+# Docker
+*.env
+.env*
+############################
+# Backend (Python) ignores #
+############################
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+*.venv/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# Caches
+.pytest_cache/
+.mypy_cache/
+.pyre/
+.pytype/
+.coverage
+.coverage.*
+htmlcov/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+.eslintcache
+coverage.xml
+
+# Project runtime data (database files, indexes, benchmarks output)
+# Ignore all under data/, then selectively re-include samples
+data/*
+!data/.gitkeep
+!data/samples/
+!data/samples/**
+benchmarks/out/
+**/*.idx
+**/*.dat
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Environment files (commit only samples)
+.env
+.env.*
+!.env.example
+
+############################
+# Frontend (Node/Next.js)  #
+############################
+auth-app/node_modules/
+auth-app/.next/
+auth-app/out/
+auth-app/build/
+auth-app/.turbo/
+auth-app/.vercel/
+auth-app/.pnpm-debug.log*
+auth-app/npm-debug.log*
+auth-app/yarn-debug.log*
+auth-app/yarn-error.log*
+auth-app/*.tsbuildinfo
+auth-app/next-env.d.ts
+auth-app/.eslintcache
+
+############################
+# Docker / Compose         #
+############################
+# Keep Dockerfiles and compose files tracked (explicitly non-ignored)
+!docker-compose.yml
+!Dockerfile
+!Dockerfile.*
+
+# Local tool caches
+/.cache/
