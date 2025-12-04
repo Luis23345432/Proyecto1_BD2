@@ -42,6 +42,8 @@ def create_app() -> FastAPI:
     app.include_router(sql_router)
     app.include_router(import_router)
     app.include_router(spimi_router)
+    from .multimedia import router as multimedia_router
+    app.include_router(multimedia_router)
 
     @app.get("/healthz")
     def healthz():

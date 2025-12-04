@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Optional
 from fastapi import APIRouter, HTTPException, Depends, Query
 
 from .auth import get_current_user
@@ -22,7 +22,8 @@ def build_index(
     user_id: str,
     db_name: str,
     table_name: str,
-    column: str = Query(..., description="Column to build SPIMI index on"),
+    column: Optional[str] = Query(None, description="Single column to index (use 'columns' for multi)"),
+    columns: Optional[List[str]] = Query(None, description="List of textual columns to concatenate and index"),
     block_max_docs: int = Query(500, description="Max docs per SPIMI block"),
     current_user: str = Depends(_verify_user_access),
 ):
@@ -47,13 +48,35 @@ def build_index(
     except Exception:
         raise HTTPException(status_code=400, detail="No pages in datafile")
 
+    # Decide input mode (single column vs multi-column concatenation)
+    use_columns = [c for c in (columns or []) if (c or '').strip()]
+    if not use_columns and not column:
+        raise HTTPException(status_code=400, detail="Provide 'column' or 'columns' to build the index")
+
+    def _concat_text(rec: Dict[str, Any]) -> Optional[str]:
+        if use_columns:
+            parts: List[str] = []
+            for c in use_columns:
+                v = rec.get(c)
+                if v is None:
+                    continue
+                try:
+                    parts.append(str(v))
+                except Exception:
+                    pass
+            s = " ".join(parts).strip()
+            return s if s else None
+        else:
+            v = rec.get(column)  # type: ignore[arg-type]
+            return str(v) if v is not None else None
+
     def doc_iter():
         for pid in range(pc):
             page = table.datafile.read_page(pid)
             records = page.iter_records()
             for slot, rec in enumerate(records):
                 rid = (pid, slot)
-                text = rec.get(column)
+                text = _concat_text(rec)
                 if text is None:
                     continue
                 yield (text, rid)

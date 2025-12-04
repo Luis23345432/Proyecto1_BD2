@@ -72,7 +72,14 @@ async def multimedia_search(
                 "ok": False,
                 "error": f"Missing inverted index at {index_dir}. Build index via /multimedia/index?index_type=inverted",
             }
-        results = search_inverted(hist, index_dir, top_k=k)
+        try:
+            results = search_inverted(hist, index_dir, top_k=k)
+        except ValueError as e:
+            return {
+                "ok": False,
+                "error": str(e),
+                "hint": "Train codebook and rebuild BoW + inverted index with the same k."
+            }
 
     return {"ok": True, "results": [{"doc_id": doc_id, "score": score} for doc_id, score in results]}
 

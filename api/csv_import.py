@@ -23,22 +23,52 @@ def _verify_user_access(user_id: str, current_user: str = Depends(get_current_us
     return current_user
 
 
-def _parse_csv_value(value: str, column_type: str) -> Any:
-    value = value.strip()
+def _parse_csv_value(value: Any, column_type: str) -> Any:
+    # Handle missing values gracefully: treat None as empty string to allow type-specific defaults
+    if value is None:
+        s = ""
+    else:
+        s = str(value)
+    s = s.strip()
+    # Treat empty strings as None for numeric columns
+    # We'll handle empties below per type; keep s as "" for now
+    # Common null sentinels from CSVs
+    if s.lower() in ("none", "null", "nan"):
+        s = ""
 
     # Arrays (para RTree): "[12.07, -77.05]" o "12.07, -77.05"
-    if column_type == 'ARRAY_FLOAT' or column_type.startswith('ARRAY'):
+    if column_type == 'ARRAY_FLOAT' or (isinstance(column_type, str) and column_type.startswith('ARRAY')):
         # Remover corchetes si existen
-        value = value.strip('[]')
+        s_arr = s.strip('[]')
         # Split por comas y convertir a float
         try:
-            return [float(x.strip()) for x in value.split(',')]
+            return [float(x.strip()) for x in s_arr.split(',') if x.strip() != ""]
         except ValueError as e:
-            raise ValueError(f"Cannot parse array value '{value}': {e}")
+            raise ValueError(f"Cannot parse array value '{s}': {e}")
 
-    # Para otros tipos, retornar el string tal cual
-    # (el sistema de tipos de la tabla lo convertirá)
-    return value
+    # Numeric coercion: provide safe defaults for missing/nulls
+    if column_type == "INT":
+        # Return string numerics to align with table coercion expecting strings
+        if s == "" or s.lower() in ("none", "null", "nan"):
+            return "0"
+        # If not purely numeric, try to extract digits; else default to 0
+        if not s.isdigit():
+            import re
+            digits = ''.join(re.findall(r"\d+", s))
+            return digits if digits != "" else "0"
+        return s
+    if column_type == "FLOAT":
+        if s == "" or s.lower() in ("none", "null", "nan"):
+            return "0.0"
+        # Allow floats like '12.34', else default to 0.0
+        try:
+            float(s)
+            return s
+        except Exception:
+            return "0.0"
+
+    # Para otros tipos: if empty, return empty string; else return trimmed string
+    return s
 
 
 @router.post("/load-csv")
@@ -62,8 +92,22 @@ async def load_csv(
     try:
         # Leer CSV
         content = await file.read()
-        lines = content.decode("utf-8").splitlines()
-        reader = csv.DictReader(lines)
+        text = content.decode("utf-8", errors="replace")
+        # Detect CSV dialect to avoid column shifts (commas inside quotes, alt delimiters)
+        try:
+            sample = text[:10000]
+            dialect = csv.Sniffer().sniff(sample)
+        except Exception:
+            class _DefaultDialect(csv.Dialect):
+                delimiter = ','
+                quotechar = '"'
+                doublequote = True
+                escapechar = None
+                lineterminator = '\n'
+                quoting = csv.QUOTE_MINIMAL
+            dialect = _DefaultDialect()
+        lines = text.splitlines()
+        reader = csv.DictReader(lines, dialect=dialect)
 
         # Obtener tipos de columnas del schema
         column_types = {col.name: col.col_type.name for col in table.schema.columns}
@@ -74,11 +118,12 @@ async def load_csv(
             parsed_row = {}
             try:
                 for col_name, value in row.items():
+                    # Only process columns present in table schema; ignore extras
                     if col_name in column_types:
                         col_type = column_types[col_name]
                         parsed_row[col_name] = _parse_csv_value(value, col_type)
                     else:
-                        parsed_row[col_name] = value
+                        continue
                 rows.append(parsed_row)
             except Exception as e:
                 raise HTTPException(

@@ -1,0 +1,113 @@
+Guion de Exposición: Indexación y Búsqueda de Imágenes (Multimedia)
+
+1) Objetivo y Alcance
+- Objetivo: Implementar búsqueda eficiente de imágenes por similitud usando un pipeline de características visuales + Bag of Visual Words (BoW) con TF‑IDF y dos estrategias de consulta (KNN secuencial e índice invertido).
+- Alcance: Solo imágenes. Audio no se incluye.
+- Resultado: Dado una imagen consulta, retornar las imágenes más similares con puntajes y tiempos medidos.
+
+2) Pipeline General (vista de alto nivel)
+- Extracción: Detectar puntos de interés y describirlos (SIFT → RootSIFT).
+- Codebook: Agrupar descriptores con MiniBatchKMeans para obtener “codewords”.
+- Cuantización: Mapear descriptores de cada imagen a codewords y construir histograma BoW.
+- Ponderación: Aplicar TF‑IDF con normalización L2.
+- Búsqueda: Comparar una imagen consulta contra la base con:
+  a) KNN secuencial (linear scan sobre BoW)
+  b) Índice invertido (postings por codeword activos)
+
+3) Extracción de Características (SIFT → RootSIFT)
+- SIFT: Detecta keypoints y crea descriptores de 128 dimensiones por punto.
+- Mejora con RootSIFT:
+  - L1‑normalize cada descriptor y aplicar sqrt(elemento a elemento).
+  - Beneficio: Mayor robustez a iluminaciones y mejor discriminación.
+- Parámetros clave:
+  - Máximo de keypoints por imagen (p.ej., 2000) para balancear calidad/tiempo.
+  - Conversión a `float32` para eficiencia en NumPy/OpenCV.
+
+4) Entrenamiento del Codebook (MiniBatchKMeans)
+- Entrada: Muestra global de descriptores (cap por imagen y cap global).
+- Algoritmo: MiniBatchKMeans (rápido y estable en grandes volúmenes).
+- Hiperparámetro principal: tamaño del codebook `k` (p.ej., 512).
+  - Trade‑off: Mayor `k` → mejor precisión, más costo de cómputo/memoria.
+- Persistencia: `data/multimedia/image/codebook.pkl` con centroids y metadatos.
+
+5) Cuantización y BoW (Soft‑Assignment + TF Sublineal)
+- Cuantización clásica: asignación dura al codeword más cercano.
+- Nuestra mejora: soft‑assignment top‑m (p.ej., 3) con pesos Gaussianos por distancia.
+  - Ventaja: Reduce artefactos de asignación dura y mejora recall.
+- Construcción del histograma BoW:
+  - Contar contribuciones por codeword; aplicar TF sublineal `log1p(tf)`.
+- DF/IDF:
+  - DF: número de documentos con cada codeword activo.
+  - IDF: `log((N+1)/(DF+1)) + 1` para suavizar.
+- Normalización:
+  - L2 del vector TF‑IDF por imagen que mejora la comparación angular.
+- Persistencia BoW:
+  - Directorio `data/multimedia/image/bow/`:
+    - `bow_*.npz`: histogramas por documento
+    - `df.pkl`: document frequencies
+    - `doc_ids.pkl`: IDs de documentos
+
+6) Índice Invertido sobre Codewords
+- Construcción:
+  - Para cada documento: calcular su vector TF‑IDF normalizado.
+  - Para cada codeword activo: agregar `(doc_id, peso)` a su posting list.
+- Persistencia:
+  - `data/multimedia/image/inv_index/`:
+    - `cw_<id>.pkl`: postings por codeword
+    - `idf.pkl`: vector IDF (longitud `k`)
+    - `doc_ids.pkl` y `term_to_block.pkl`
+- Beneficio: Consulta rápida activando solo codewords presentes en la imagen consulta.
+
+7) Estrategias de Búsqueda
+- KNN Secuencial:
+  - Calcular TF‑IDF normalizado de la consulta.
+  - Coseno contra todos los documentos (linear scan).
+  - Ventaja: Simple y estable; útil en datasets pequeños/medianos.
+  - Costo: O(N·k).
+- Invertido (sobre codewords):
+  - Ponderar consulta; iterar solo codewords activos.
+  - Acumular puntajes con postings; Top‑K por heap.
+  - Ventaja: Mucho más rápido cuando la consulta es dispersa y el dataset es grande.
+
+8) Gestión de Consistencia (k y artefactos)
+- Regla crítica: Mantener el mismo `k` en todo el pipeline.
+  - Si se re‑entrena el codebook con otro `k`, RECONSTRUIR BoW e índice invertido.
+- Validaciones:
+  - Comprobación de dimensiones en consulta invertida; error claro si `len(query) != len(idf)`.
+  - En API, se captura el error y se retorna JSON con la acción a seguir.
+
+9) API y Flujo de Uso (endpoints clave)
+- Entrenamiento del codebook:
+  - POST `/multimedia/train-codebook?modality=image&data_root=...&k=512`
+- Construcción BoW:
+  - POST `/multimedia/index?modality=image&data_root=...&index_type=bow`
+- Construcción índice invertido:
+  - POST `/multimedia/index?modality=image&data_root=...&index_type=inverted`
+- Búsqueda:
+  - POST `/multimedia/search?modality=image&strategy=inverted&k=10` (o `strategy=sequential`)
+- Recomendación: Usar siempre la misma `k` entre entrenamiento e indexación.
+
+10) UI (resumen de controles relevantes)
+- Botones: Train Codebook → Build BoW → Build Inverted.
+- Estado: Badges de “Ready” para codebook/BoW/inverted.
+- Parámetros: Top‑K editable; persistencia del Data Root.
+
+11) Calidad y Optimizaciones Implementadas
+- RootSIFT: mejora la robustez y precisión frente a SIFT puro.
+- Soft‑Assignment: top‑3 con Gaussian weights, reduce errores de cuantización dura.
+- TF Sublineal: estabiliza magnitudes y mejora ranking.
+- Normalización L2: favorece similitud coseno consistente.
+
+12) Métricas y Resultados (experimentos)
+- Script: `benchmarks/run_experiments.py` genera tiempos para KNN secuencial vs invertido.
+- Salida: `benchmarks/report.json` con ms por N.
+- Observación típica: Índice invertido mejora latencia en consultas con BoW disperso.
+
+13) Limitaciones y Próximos Pasos
+- Tamaño del dataset: más grande → considerar ANN (Faiss/pgVector) para KNN rápido.
+- Hiperparámetros: afinar `k`, `top_m`, `sigma`, y máximo de keypoints.
+- Mejoras futuras: multi‑escala densa, PCA/whitening, stop‑codewords, verificación automática y reconstrucción de artefactos si cambian parámetros.
+
+14) Conclusión
+- El sistema implementa un pipeline sólido y reproducible para búsqueda de imágenes por similitud con dos estrategias complementarias.
+- Mantener consistencia del `k` y reconstruir artefactos tras cambios es clave para resultados correctos y tiempos óptimos.

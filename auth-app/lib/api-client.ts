@@ -320,3 +320,30 @@ export async function multimediaStatus(modality?: "image" | "audio") {
   const response = await fetch(url, { method: "GET" })
   return response.json()
 }
+
+// ---- SPIMI (Full-Text) helpers ----
+export async function spimiBuildIndex(
+  userId: string,
+  token: string,
+  dbName: string,
+  tableName: string,
+  opts: { column?: string; columns?: string[]; blockMaxDocs?: number } = {},
+): Promise<{ ok: boolean; total_documents?: number; index_dir?: string; message?: string }> {
+  const params = new URLSearchParams()
+  if (opts.column) params.set("column", opts.column)
+  if (opts.columns && opts.columns.length) {
+    // FastAPI can parse repeated params as list: columns=col1&columns=col2
+    opts.columns.forEach((c) => params.append("columns", c))
+  }
+  if (opts.blockMaxDocs) params.set("block_max_docs", String(opts.blockMaxDocs))
+  const url = `${BASE_URL}/users/${userId}/databases/${dbName}/tables/${tableName}/spimi/build?${params.toString()}`
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!resp.ok) {
+    const error: ApiError = await resp.json()
+    throw { status: resp.status, error }
+  }
+  return resp.json()
+}

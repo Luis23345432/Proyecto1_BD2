@@ -5,7 +5,7 @@ import math
 import os
 import urllib.parse
 import heapq
-from typing import Dict, Iterable, List, Tuple, Any
+from typing import Dict, Iterable, List, Tuple, Any, Set
 
 from .inverted_index import tokenize
 
@@ -189,9 +189,40 @@ def merge_blocks(block_dir: str, index_dir: str, total_docs: int | None = None) 
 
     doc_norms = {docid: math.sqrt(s) for docid, s in doc_sumsq.items()}
 
-    meta = {"N": N, "num_terms": num_terms, "doc_norms": doc_norms}
-    with open(os.path.join(index_dir, 'meta.json'), 'w', encoding='utf-8') as f:
-        json.dump(meta, f, ensure_ascii=False)
+    # For very large collections, shard doc_norms across files to avoid huge meta.json
+    SHARD_THRESHOLD = 50000  # number of docs above which we shard
+    if len(doc_norms) > SHARD_THRESHOLD:
+        shard_dir = os.path.join(index_dir, 'doc_norms')
+        _ensure_dir(shard_dir)
+        shard_count = 256  # 2-hex prefix shards
+
+        # Prepare in-memory buckets per shard
+        buckets: List[Dict[str, float]] = [dict() for _ in range(shard_count)]
+        import hashlib
+
+        def shard_index(docid: str) -> int:
+            h = hashlib.sha1(docid.encode('utf-8')).digest()[0]
+            return int(h)
+
+        for docid, norm in doc_norms.items():
+            idx = shard_index(docid)
+            buckets[idx][docid] = norm
+
+        # Write shards
+        for i, bucket in enumerate(buckets):
+            if not bucket:
+                continue
+            shard_name = f"{i:02x}.json"
+            with open(os.path.join(shard_dir, shard_name), 'w', encoding='utf-8') as f:
+                json.dump(bucket, f, ensure_ascii=False)
+
+        meta = {"N": N, "num_terms": num_terms, "doc_norms_sharded": True, "shards": 256}
+        with open(os.path.join(index_dir, 'meta.json'), 'w', encoding='utf-8') as f:
+            json.dump(meta, f, ensure_ascii=False)
+    else:
+        meta = {"N": N, "num_terms": num_terms, "doc_norms": doc_norms}
+        with open(os.path.join(index_dir, 'meta.json'), 'w', encoding='utf-8') as f:
+            json.dump(meta, f, ensure_ascii=False)
 
 
 def load_term_postings(index_dir: str, term: str) -> Tuple[int, List[Tuple[DocID, int]]]:
@@ -259,6 +290,23 @@ def search_topk(index_dir: str, query: str, k: int = 10, do_stem: bool = False) 
 
     # divide by document norms
     doc_norms = meta.get('doc_norms', {})
+    # If sharded, load only shards needed for docs present in scores
+    if meta.get('doc_norms_sharded'):
+        import hashlib
+        shard_dir = os.path.join(index_dir, 'doc_norms')
+        needed_shards: Set[int] = set()
+        for docid in scores.keys():
+            h = hashlib.sha1(docid.encode('utf-8')).digest()[0]
+            needed_shards.add(int(h))
+        loaded: Dict[str, float] = {}
+        for i in needed_shards:
+            shard_path = os.path.join(shard_dir, f"{i:02x}.json")
+            if not os.path.exists(shard_path):
+                continue
+            with open(shard_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            loaded.update({str(k): float(v) for k, v in data.items()})
+        doc_norms = loaded
     q_norm = math.sqrt(sum(v * v for v in q_weights.values()))
     ranked: List[Tuple[DocID, float]] = []
     for docid, dot in scores.items():

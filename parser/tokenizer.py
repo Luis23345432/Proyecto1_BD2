@@ -22,7 +22,13 @@ class Token:
 
 class SQLTokenizer:
     def __init__(self, sql: str):
-        self.sql = sql
+        # Normalize Unicode smart quotes to ASCII to avoid CHAR tokens
+        self.sql = (
+            sql.replace('\u2018', "'")
+               .replace('\u2019', "'")
+               .replace('\u201C', '"')
+               .replace('\u201D', '"')
+        )
 
     def tokenize(self) -> List[Token]:
         s = self.sql

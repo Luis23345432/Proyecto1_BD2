@@ -1,23 +1,6 @@
-### Uso SQL: consulta full-text
+# Proyecto 1 – Base de Datos 2 (CS2702)
 
-Puedes usar el operador `@@` en una cláusula WHERE para ejecutar búsquedas full-text contra una columna indexada con `FULLTEXT` (SPIMI / inverted index):
-
-Ejemplo:
-```sql
-SELECT title, artist, lyric
-FROM Audio
-WHERE lyric @@ 'amor en tiempos de guerra'
-LIMIT 10;
-```
-
-Comportamiento:
-- El parser reconoce `@@` como operador `OP` y el planner genera un plan `SPIMI_SEARCH` si la columna tiene un índice `FULLTEXT`.
-- El executor llamará a la implementación en `indexes/spimi.search_topk` para leer únicamente los postings de los términos y devolver los `k` mejores resultados por similitud coseno (TF-IDF). Si no existe un índice en disco, se caerá al `InvertedIndex` en memoria o a full scan.
-- El `LIMIT` se respeta y se usa como `k` para la búsqueda top-k.
-
-# Proyecto BD2 – Motor de BD + API + Frontend (Docker)
-
-Este proyecto implementa un pequeño motor de base de datos con índices, expuesto vía API FastAPI y un frontend Next.js para operar con SQL y CSV. Incluye despliegue con Docker Compose, soporte de múltiples tipos de índices (BTREE, ISAM, AVL, HASH, RTREE) y consultas espaciales por SQL.
+Informe técnico conciso y guía de uso del sistema multimodal de recuperación por contenido: texto (full‑text) e imágenes/audio (BoW/Índice invertido), con backend FastAPI y frontend Next.js.
 
 ## Arquitectura rápida
 
@@ -93,6 +76,108 @@ Notas importantes:
 	- `POST /load-csv` multipart con `file`
 
 Swagger UI: http://localhost:8000/docs
+
+## Introducción
+- Dominio de datos: texto estructurado (tablas con columnas de lenguaje natural) e imágenes/audio (descriptores locales). El objetivo es recuperar por contenido: en texto, documentos similares a una consulta; en multimedia, objetos visuales/sonoros similares al ejemplo.
+- Justificación: una base multimodal combina índice invertido full‑text con técnicas de descriptores (SIFT/RootSIFT, MFCC) y BoW para soportar consultas eficientes sin cargar toda la colección en memoria, aprovechando índices de disco (SPIMI para texto; BoW + índice invertido para multimedia).
+
+## Backend – Índice Invertido para Texto
+- Construcción en memoria secundaria (SPIMI):
+	- Bloques: se tokeniza/filtra cada documento y se generan archivos JSON por bloque con postings `t -> [[docid, tf], ...]`.
+	- Merge multi‑bloque: se fusionan vía heap y se generan archivos por término bajo `index_dir/terms/<term>.json`.
+	- Meta y normas de documento: se computa TF‑IDF y norma L2 por documento; para colecciones grandes, se fragmenta en shards de `doc_norms/`.
+- Consulta eficiente (Coseno Top‑K):
+	- Para la consulta se leen solo los postings de términos consultados, se acumula el producto punto TF‑IDF y se divide por las normas; se retorna Top‑K ordenado por similitud.
+- PostgreSQL (referencia):
+	- PostgreSQL implementa índices invertidos mediante GIN/TSVector. Nuestro enfoque replica el pipeline: tokenización, stopwords, stemming, TF‑IDF y cosine, pero en un diseño de archivos JSON accesibles sin carga total a RAM.
+- Archivos clave: `indexes/spimi.py`, `indexes/inverted_index.py`, `api/spimi.py`, `parser/*`.
+
+## Backend – Índice Invertido para Descriptores Locales
+- Bag of Visual/Acoustic Words:
+	- Extracción: imágenes con SIFT normalizado (RootSIFT) y audio con MFCC; ver `multimedia/features_image.py`, `multimedia/features_audio.py`.
+	- Codebook: MiniBatchKMeans (p. ej., k=512–1024) entrenado sobre muestras; ver `multimedia/codebook.py`.
+	- BoW: cuantización con soft‑assignment (Top‑3 centroides con pesos gaussianos), TF‑IDF con TF sublineal y normalización L2; ver `multimedia/bow.py`.
+- Indexación:
+	- Secuencial KNN: se normalizan histogramas y se calcula la similitud coseno contra todos; útil para colecciones medianas.
+	- Índice invertido multimedia: postings por codeword con pesos TF‑IDF normalizados; búsqueda rápida cargando solo codewords activos; ver `multimedia/inv_index.py`.
+- Maldición de la dimensionalidad:
+	- Impacto: histogramas de alta dimensión pueden dificultar separación.
+	- Mitigación: RootSIFT, TF sublineal, soft‑assignment, aumentar k del codebook, y (opcional) PCA/whitening previo al k‑means.
+
+## Frontend (GUI) y Mini‑manual
+- App Next.js en `auth-app/` con dos paneles:
+	- DBMS: ejecutar consultas SQL‑like; campo Top‑K editable y builder de índices SPIMI multi‑columna.
+	- Multimedia: entrenar codebook, construir BoW o índice invertido, consultar por imagen/audio, elegir estrategia (Sequential KNN o Inverted Index), y ver resultados con puntajes y tiempos.
+- Indicadores de estado:
+	- Muestra `codebook/bow/inverted` para la modalidad actual (verde: listo, rojo: faltante).
+- Mini‑manual de uso:
+	1) Establecer `Data Root`.
+	2) “Train Codebook” con k adecuado.
+	3) “Build BoW” o “Build Index (inverted)”.
+	4) “Check Status” hasta ver todos verdes.
+	5) Seleccionar archivo y “Search”; ajustar Top‑K.
+	6) Texto: usar `@@` y/o `LIMIT K`.
+
+Capturas de referencia (en el proyecto):
+- Postman collections en `postman/` para SPIMI y multimedia.
+- Panel Multimedia con badges “Ready” (codebook/bow/inverted) y resultados con tiempos.
+
+## Experimentación
+- Script: `benchmarks/run_experiments.py` genera `benchmarks/report.json` (texto SPIMI y multimedia KNN secuencial vs invertido).
+- Medición: el frontend reporta `Execution time (ms)` por búsqueda; el script resume latencias y cuenta de resultados.
+- Análisis: comparar rendimiento y escalabilidad; para multimedia, el índice invertido suele superar al KNN secuencial en consultas BoW dispersas.
+- Herramientas de comparación externas (opcional): `pgVector` (PostgreSQL) y `Faiss` (ANN CPU/GPU).
+
+<!-- Conclusiones removidas según solicitud -->
+
+## Ejemplos de uso rápidos
+- Texto SPIMI:
+```sql
+SELECT title, artist, lyric
+FROM Audio
+WHERE lyric @@ 'amor en tiempos de guerra'
+LIMIT 10;
+```
+- Multimedia BoW secuencial:
+```python
+# Entrena codebook, cuantiza y guarda BoW; luego consulta
+from multimedia.bow import quantize_descriptors, compute_df, save_bow_artifacts
+from multimedia.knn_sequential import search_sequential
+results = search_sequential(query_hist, "data/multimedia/image/bow", top_k=5)
+```
+- Multimedia invertido:
+```python
+from multimedia.inv_index import build_inverted_index, search_inverted
+build_inverted_index(doc_ids, hists, "data/multimedia/image/inv")
+search_inverted(query_hist, "data/multimedia/image/inv", top_k=5)
+```
+
+## Cómo correr
+- Backend (PowerShell):
+```
+python -m pip install --upgrade pip wheel
+pip install -r requirements.txt
+uvicorn api.app:app --reload --host 127.0.0.1 --port 8000
+```
+- Frontend (PowerShell):
+```
+$env:NEXT_PUBLIC_API_BASE_URL="http://127.0.0.1:8000"
+cd auth-app
+npm install
+npm run dev
+```
+- Tests (PowerShell):
+```
+python -m pytest -q
+```
+
+### Pruebas (pytest)
+- Configuración de descubrimiento en `pytest.ini` para evitar problemas con comodines:
+	- `testpaths = tools`
+	- Patrones de archivos/funciones ajustados.
+- Comandos útiles:
+	- Ejecutar todo: `python -m pytest -q`
+	- Ejecutar solo multimedia: `python -m pytest -q tools/test_multimedia_image.py`
 
 ## Despliegue con Docker Compose (Windows)
 
@@ -303,5 +388,23 @@ Si quieres, puedo:
 - mejorar `merge_blocks` para respetar memoria limitada y documentar MergeBlocks con gráficos para tu informe.
 
 *** Fin de las notas añadidas ***
+
+## Resumen de Implementaciones Clave
+- Full‑Text (Texto):
+	- SPIMI por bloques + merge multi‑way; archivos por término y `meta.json` (N, doc_norms sharded).
+	- Búsqueda Top‑K por coseno leyendo postings de términos de la consulta.
+	- Stemming opcional (snowballstemmer) y normalización Unicode; stopwords ampliadas.
+- Multimedia (Imágenes/Audio):
+	- RootSIFT (post‑SIFT) y MFCC; codebook con MiniBatchKMeans.
+	- BoW con soft‑assignment (Top‑3, Gaussian weights), TF sublineal y normalización L2.
+	- KNN secuencial y búsqueda indexada con postings por codeword e IDF; chequeo de dimensiones y manejo de errores en API.
+- Frontend:
+	- Panel Multimedia con “Train Codebook”, “Build BoW”, “Build Inverted”, “Check Status”, Top‑K editable y persistencia de Data Root.
+	- Panel DBMS con editor SQL, builder SPIMI y mejoras de usabilidad.
+- CSV Import:
+	- Detección de dialecto (csv.Sniffer), manejo de nulls y coerción segura (INT/FLOAT), ignorar columnas extra.
+
+## Conclusión
+El sistema integra un backend con índices invertidos para texto y multimedia, y una GUI práctica para entrenar, indexar y consultar. Las decisiones de diseño (SPIMI, TF‑IDF, RootSIFT, soft‑assignment) equilibran precisión y rendimiento; la API y el frontend incluyen validaciones y estados para uso fluido. Para escalas mayores, se sugiere comparar con `pgVector`/`Faiss` y considerar ANN.
 
 

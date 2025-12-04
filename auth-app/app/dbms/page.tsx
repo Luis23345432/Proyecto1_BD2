@@ -5,11 +5,12 @@ import type React from "react";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { deleteDatabase, executeQuery } from "@/lib/api-client";
+import { deleteDatabase, executeQuery, spimiBuildIndex } from "@/lib/api-client";
 import { DatabaseSelector } from "@/components/database-selector";
 import { CreateDatabaseModal } from "@/components/create-database-modal";
 import { TablesSelector } from "@/components/tables-selector";
 import { QueryResults } from "@/components/query-results";
+import MultimediaSearch from "@/components/multimedia-search";
 import { CSVImportModal } from "@/components/csv-import-modal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,10 +27,15 @@ export default function DBMSManagerPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [queryInput, setQueryInput] = useState("");
   const [queryResults, setQueryResults] = useState<any | null>(null);
+  const [topK, setTopK] = useState<number>(10);
   const [isExecuting, setIsExecuting] = useState(false);
   const [queryError, setQueryError] = useState<string | null>(null);
   const [tablesRefreshKey, setTablesRefreshKey] = useState(0);
   const [isCSVModalOpen, setIsCSVModalOpen] = useState(false);
+  const [spimiTable, setSpimiTable] = useState("");
+  const [spimiColumns, setSpimiColumns] = useState("");
+  const [spimiBuilding, setSpimiBuilding] = useState(false);
+  const [spimiMessage, setSpimiMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -99,11 +105,17 @@ export default function DBMSManagerPage() {
     setIsExecuting(true);
     setQueryError(null);
     try {
+      // Ensure LIMIT Top-K is present if user didn't specify it
+      let sql = queryInput.trim();
+      const hasLimit = /\bLIMIT\b\s+\d+/i.test(sql);
+      if (!hasLimit && topK > 0) {
+        sql = `${sql}\nLIMIT ${topK}`;
+      }
       const results = await executeQuery(
         userId,
         token,
         selectedDatabase,
-        queryInput
+        sql
       );
       setQueryResults(results);
 
@@ -116,6 +128,31 @@ export default function DBMSManagerPage() {
       setQueryResults(null);
     } finally {
       setIsExecuting(false);
+    }
+  };
+
+  const handleBuildSpimi = async () => {
+    if (!userId || !token || !selectedDatabase) return;
+    const table = spimiTable.trim();
+    const cols = spimiColumns
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (!table || (!cols.length && queryInput.indexOf("@@") === -1)) {
+      setSpimiMessage("Provide table and columns (comma-separated)");
+      return;
+    }
+    setSpimiBuilding(true);
+    setSpimiMessage(null);
+    try {
+      const res = await spimiBuildIndex(userId, token, selectedDatabase, table, {
+        columns: cols.length ? cols : undefined,
+      });
+      setSpimiMessage(res.message || `Built index: ${res.total_documents} docs`);
+    } catch (e: any) {
+      setSpimiMessage(e?.error?.detail || "Failed to build SPIMI index");
+    } finally {
+      setSpimiBuilding(false);
     }
   };
 
@@ -239,20 +276,56 @@ export default function DBMSManagerPage() {
                       placeholder="Enter your query here... (Press Shift+Enter to execute)"
                       className="w-full h-32 p-4 border border-timberwolf rounded-lg bg-white text-ebony placeholder-davys-gray focus:outline-none focus:ring-2 focus:ring-cambridge-blue resize-none"
                     />
-                    <div className="mt-2 flex gap-2">
-                      <Button
-                        onClick={handleExecuteQuery}
-                        disabled={isExecuting || !queryInput.trim()}
-                        className="bg-cambridge-blue hover:bg-ebony text-alabaster font-medium disabled:opacity-50"
-                      >
-                        {isExecuting ? "Executing..." : "Execute Query"}
-                      </Button>
-                      <Button
-                        onClick={() => setIsCSVModalOpen(true)}
-                        className="bg-cambridge-blue hover:bg-ebony text-alabaster font-medium"
-                      >
-                        Import CSV
-                      </Button>
+                    <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
+                      <div>
+                        <label className="block text-sm font-medium text-ebony mb-2">Top‑K</label>
+                        <input
+                          type="number"
+                          value={topK}
+                          inputMode="numeric"
+                          step={1}
+                          min={1}
+                          max={100}
+                          onChange={(e) => {
+                            const v = e.currentTarget.value;
+                            // Allow empty while typing; don't lock the field
+                            if (v === "") {
+                              // do not update to NaN; keep previous
+                              return;
+                            }
+                            let n = Number(e.currentTarget.value);
+                            if (!Number.isFinite(n)) {
+                              return;
+                            }
+                            // Clamp
+                            if (n < 1) n = 1;
+                            if (n > 100) n = 100;
+                            setTopK(Math.floor(n));
+                          }}
+                          onBlur={(e) => {
+                            // If left empty, restore default 10
+                            if (e.currentTarget.value === "") {
+                              setTopK(10);
+                            }
+                          }}
+                          className="w-full p-2 border rounded"
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={handleExecuteQuery}
+                          disabled={isExecuting || !queryInput.trim()}
+                          className="bg-cambridge-blue hover:bg-ebony text-alabaster font-medium disabled:opacity-50"
+                        >
+                          {isExecuting ? "Executing..." : "Execute Query"}
+                        </Button>
+                        <Button
+                          onClick={() => setIsCSVModalOpen(true)}
+                          className="bg-cambridge-blue hover:bg-ebony text-alabaster font-medium"
+                        >
+                          Import CSV
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -273,6 +346,46 @@ export default function DBMSManagerPage() {
                     <QueryResults response={queryResults} />
                   </div>
                 )}
+
+                {/* Multimedia Search */}
+                <div className="border-t border-timberwolf pt-6">
+                  <MultimediaSearch />
+                </div>
+
+                {/* Full-Text (SPIMI) Builder */}
+                <div className="border-t border-timberwolf pt-6">
+                  <label className="block text-sm font-medium text-ebony mb-2">Build Full-Text Index (SPIMI)</label>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+                    <div>
+                      <label className="block text-xs text-davys-gray mb-1">Table</label>
+                      <input
+                        type="text"
+                        value={spimiTable}
+                        onChange={(e) => setSpimiTable(e.target.value)}
+                        placeholder="Table name"
+                        className="w-full p-2 border rounded"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-davys-gray mb-1">Columns (comma-separated)</label>
+                      <input
+                        type="text"
+                        value={spimiColumns}
+                        onChange={(e) => setSpimiColumns(e.target.value)}
+                        placeholder="e.g. title, description"
+                        className="w-full p-2 border rounded"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button onClick={handleBuildSpimi} disabled={spimiBuilding} className="bg-cambridge-blue text-alabaster">
+                        {spimiBuilding ? "Building..." : "Build SPIMI"}
+                      </Button>
+                    </div>
+                  </div>
+                  {spimiMessage && (
+                    <div className="mt-3 p-3 bg-white border rounded text-sm text-ebony">{spimiMessage}</div>
+                  )}
+                </div>
               </div>
             )}
 

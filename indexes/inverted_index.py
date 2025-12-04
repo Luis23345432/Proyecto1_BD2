@@ -8,19 +8,12 @@ from typing import Dict, Set, Tuple, List, Iterable, Any, Optional
 
 Rid = Tuple[int, int]
 
-# Very small stopword list; can be extended
+# Expanded Spanish/English stopword list (lightweight, no external deps)
 STOPWORDS = {
-    "the",
-    "a",
-    "an",
-    "and",
-    "or",
-    "in",
-    "on",
-    "at",
-    "to",
-    "of",
-    "for",
+    # English
+    "the","a","an","and","or","in","on","at","to","of","for","is","are","was","were","be","been","by","with","from","as","that","this","these","those","it","its","into","about","over","under","than","then","there","here","up","down","out","off","so","but","not",
+    # Spanish
+    "el","la","los","las","un","una","unos","unas","y","o","u","en","de","del","al","a","por","para","con","sin","sobre","entre","tras","durante","segun","según","contra","como","que","qué","se","su","sus","tu","tus","mi","mis","nuestro","nuestra","nuestros","nuestras","vuestro","vuestra","vuestros","vuestras","lo","le","les","ya","muy","más","menos","tambien","también","pero","porque","cuando","donde","dónde","cual","cuál","cuales","cuáles","quien","quién","quienes","quiénes","esto","eso","aquello","aqui","aquí","alli","allí","allá","hoy","ayer","mañana","si","sí","no","ni","cada","casi","tal","tales","otro","otros","otra","otras","donde","desde","hasta","sino","e","ademas","además","pues","ante","bajo","cabe","era","eran","es","son","ser","será","serán"
 }
 
 TOKEN_RE = re.compile(r"\w+", flags=re.UNICODE)
@@ -201,7 +194,21 @@ class InvertedIndex:
         }
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False)
-        os.replace(tmp, path)
+        try:
+            os.replace(tmp, path)
+        except PermissionError:
+            # On Windows, destination file may be locked by AV/indexer; retry by removing then renaming
+            try:
+                if os.path.exists(path):
+                    os.remove(path)
+                os.replace(tmp, path)
+            finally:
+                # Ensure temp is not left behind if something goes wrong
+                if os.path.exists(tmp):
+                    try:
+                        os.remove(tmp)
+                    except Exception:
+                        pass
 
     @classmethod
     def load_idx(cls, path: str) -> "InvertedIndex":
