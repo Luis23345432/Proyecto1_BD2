@@ -6,6 +6,8 @@ const BASE_URL = envApiBase
       ? `${window.location.protocol}//${window.location.hostname}:8000`
       : "http://127.0.0.1:8000")
 
+export const API_BASE_URL = BASE_URL
+
 export interface RegisterRequest {
   username: string
   password: string
@@ -243,5 +245,78 @@ export async function uploadCSV(
     }
   }
 
+  return response.json()
+}
+
+export interface MultimediaSearchResult {
+  ok?: boolean
+  error?: string
+  results?: Array<{ doc_id: string; score: number }>
+}
+
+export async function multimediaSearch(
+  file: File,
+  modality: "image" | "audio",
+  strategy: "sequential" | "inverted" = "inverted",
+  k: number = 10,
+): Promise<MultimediaSearchResult> {
+  const formData = new FormData()
+  formData.append("file", file)
+  const url = `${BASE_URL}/multimedia/search?modality=${modality}&strategy=${strategy}&k=${k}`
+  const response = await fetch(url, {
+    method: "POST",
+    body: formData,
+  })
+  const data = await response.json()
+  if (!response.ok || data?.ok === false) {
+    const error: ApiError = (data && data.error) ? { detail: data.error } : data
+    throw { status: response.status, error }
+  }
+  return data
+}
+
+export async function multimediaTrainCodebook(
+  modality: "image" | "audio",
+  dataRoot: string,
+  k: number = 512,
+  perObjectCap: number = 500,
+  globalCap: number = 200000,
+): Promise<{ ok: boolean; modality?: string; k?: number; paths?: number; error?: string }> {
+  const response = await fetch(`${BASE_URL}/multimedia/train-codebook`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      modality,
+      data_root: dataRoot,
+      k,
+      per_object_cap: perObjectCap,
+      global_cap: globalCap,
+    }),
+  })
+  return response.json()
+}
+
+export async function multimediaBuildIndex(
+  modality: "image" | "audio",
+  dataRoot: string,
+  indexType: "bow" | "inverted" = "inverted",
+): Promise<{ ok: boolean; modality?: string; index_type?: string; count?: number; error?: string }> {
+  const response = await fetch(`${BASE_URL}/multimedia/index`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      modality,
+      data_root: dataRoot,
+      index_type: indexType,
+    }),
+  })
+  return response.json()
+}
+
+export async function multimediaStatus(modality?: "image" | "audio") {
+  const url = modality
+    ? `${BASE_URL}/multimedia/status?modality=${modality}`
+    : `${BASE_URL}/multimedia/status`
+  const response = await fetch(url, { method: "GET" })
   return response.json()
 }

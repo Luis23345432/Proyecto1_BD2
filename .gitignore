@@ -1,3 +1,32 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Node / Next.js
+auth-app/node_modules/
+auth-app/.next/
+auth-app/.turbo/
+
+# VSCode
+.vscode/
+
+# Datasets (do not commit full datasets)
+datasets/
+data/datasets/
+data/users/
+
+# Multimedia generated artifacts (keep local only)
+data/multimedia/*
+!data/multimedia/.gitkeep
+data/multimedia/**/thumbnails/
+
+# Keep small samples
+!data/samples/**
+
+# Docker
+*.env
+.env*
 ############################
 # Backend (Python) ignores #
 ############################
@@ -46,7 +75,11 @@ desktop.ini
 coverage.xml
 
 # Project runtime data (database files, indexes, benchmarks output)
-data/
+# Ignore all under data/, then selectively re-include samples
+data/*
+!data/.gitkeep
+!data/samples/
+!data/samples/**
 benchmarks/out/
 **/*.idx
 **/*.dat
