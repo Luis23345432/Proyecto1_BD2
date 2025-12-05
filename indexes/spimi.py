@@ -1,3 +1,12 @@
+"""Índice invertido SPIMI (Single-Pass In-Memory Indexing).
+
+Implementa construcción de índice invertido para grandes colecciones:
+- Construye bloques parciales del índice en memoria.
+- Fusiona bloques en un índice final organizado por término.
+- Almacena archivos por término para búsquedas eficientes.
+- Calcula normas de documentos para ranking TF-IDF.
+- Soporta búsqueda top-k con similitud coseno.
+"""
 from __future__ import annotations
 
 import json
@@ -9,13 +18,7 @@ from typing import Dict, Iterable, List, Tuple, Any, Set
 
 from .inverted_index import tokenize
 
-# Simple SPIMI-based inverted index implementation
-# - Builds blocks (term -> postings) from a stream of documents
-# - Writes block files (JSON)
-# - Merges block files into a final on-disk index organized per-term
-# - Stores meta (N docs, doc norms) and per-term files under `index_dir`
-
-DocID = str  # string like "page_slot" or numeric id as string
+DocID = str
 
 
 def _ensure_dir(path: str) -> None:
@@ -32,9 +35,18 @@ def build_spimi_blocks(
     block_max_docs: int = 500,
     do_stem: bool = False,
 ):
-    """Create SPIMI blocks from an iterable of (text, rid) pairs.
+    """Construye bloques SPIMI desde un flujo de documentos.
 
-    Each block is a JSON file mapping term -> list of [docid, tf]
+    Cada bloque es un archivo JSON que mapea términos a listas de [docid, tf].
+    
+    Args:
+        docs: Iterable de tuplas (texto, rid).
+        block_dir: Directorio donde guardar los bloques.
+        block_max_docs: Número máximo de documentos por bloque.
+        do_stem: Si aplicar stemming a los tokens.
+    
+    Returns:
+        Número total de documentos procesados.
     """
     _ensure_dir(block_dir)
     block = {}
@@ -44,7 +56,6 @@ def build_spimi_blocks(
 
     def write_block(bid: int, bdata: Dict[str, Dict[str, int]]):
         path = os.path.join(block_dir, f"block_{bid}.json")
-        # bdata: term -> {docid: tf, ...}
         serial = {t: [[docid, tf] for docid, tf in postings.items()] for t, postings in bdata.items()}
         with open(path, "w", encoding="utf-8") as f:
             json.dump(serial, f, ensure_ascii=False)
@@ -55,7 +66,6 @@ def build_spimi_blocks(
         docid = _docid_to_str(rid)
         docs_in_block += 1
 
-        # count tf per document
         counts: Dict[str, int] = {}
         for t in terms:
             counts[t] = counts.get(t, 0) + 1
@@ -77,26 +87,28 @@ def build_spimi_blocks(
 
 
 def merge_blocks(block_dir: str, index_dir: str, total_docs: int | None = None) -> None:
-    """Merge JSON block files into per-term files in `index_dir/terms/` and create meta.json.
+    """Fusiona bloques JSON en archivos por término y crea meta.json.
 
-    Final layout:
-      index_dir/
-        meta.json  # {N: int}
-        terms/
-          <term>.json -> {"df": int, "postings": [[docid, tf], ...]}
+    Estructura final:
+        index_dir/
+            meta.json  # {N: int, doc_norms: {...}}
+            terms/
+                <term>.json -> {"df": int, "postings": [[docid, tf], ...]}
+    
+    Args:
+        block_dir: Directorio con archivos de bloques.
+        index_dir: Directorio de salida para el índice final.
+        total_docs: Número total de documentos (opcional).
     """
     _ensure_dir(index_dir)
     terms_dir = os.path.join(index_dir, "terms")
     _ensure_dir(terms_dir)
 
-    # Gather block files
     block_files = [os.path.join(block_dir, f) for f in os.listdir(block_dir) if f.endswith('.json')]
     if not block_files:
-        # nothing to merge
         return
     print(f"Merging {len(block_files)} block(s) from {block_dir} into {index_dir}")
 
-    # Build per-block sorted lists of (term, postings) and maintain an index per block
     block_iters: List[Dict[str, Any]] = []
     for bf in block_files:
         with open(bf, 'r', encoding='utf-8') as f:
@@ -105,34 +117,28 @@ def merge_blocks(block_dir: str, index_dir: str, total_docs: int | None = None) 
         items.sort(key=lambda x: x[0])
         block_iters.append({'items': items, 'idx': 0, 'file': bf})
 
-    # Initialize a heap with the first term from each block
-    heap: List[Tuple[str, int]] = []  # (term, block_idx)
+    heap: List[Tuple[str, int]] = []
     for i, b in enumerate(block_iters):
         if b['items']:
             term0 = b['items'][0][0]
             heapq.heappush(heap, (term0, i))
 
-    # Multi-way merge using a priority queue (min-heap) keyed by term
     num_terms = 0
     while heap:
         term, bidx = heapq.heappop(heap)
-        # Aggregate postings for 'term' from any block that has it as current
         agg: Dict[str, int] = {}
 
-        # process this block's current item
         b = block_iters[bidx]
         idx = b['idx']
         t, postings = b['items'][idx]
         assert t == term
         for docid, tf in postings:
             agg[docid] = agg.get(docid, 0) + int(tf)
-        # move iterator forward for this block and push next term
         b['idx'] += 1
         if b['idx'] < len(b['items']):
             next_term = b['items'][b['idx']][0]
             heapq.heappush(heap, (next_term, bidx))
 
-        # Now consume any other blocks that currently point at the same term
         while heap and heap[0][0] == term:
             _, other_bidx = heapq.heappop(heap)
             ob = block_iters[other_bidx]
@@ -145,7 +151,6 @@ def merge_blocks(block_dir: str, index_dir: str, total_docs: int | None = None) 
             if ob['idx'] < len(ob['items']):
                 heapq.heappush(heap, (ob['items'][ob['idx']][0], other_bidx))
 
-        # write merged per-term file
         safe_term = urllib.parse.quote_plus(term)
         pf = os.path.join(terms_dir, f"{safe_term}.json")
         posting_items = [[docid, tf] for docid, tf in sorted(agg.items())]
@@ -155,8 +160,6 @@ def merge_blocks(block_dir: str, index_dir: str, total_docs: int | None = None) 
         num_terms += 1
 
     print(f"Merged {num_terms} terms. Computing doc norms and writing meta.json")
-    # At this point we've created per-term files; we need to compute doc norms and meta.
-    # If total_docs was provided, N = total_docs, else compute N by scanning per-term files
     if total_docs is None:
         docs_seen = set()
         for fname in os.listdir(terms_dir):
@@ -169,7 +172,6 @@ def merge_blocks(block_dir: str, index_dir: str, total_docs: int | None = None) 
     else:
         N = int(total_docs)
 
-    # Second pass: compute doc_norms by reading per-term files and computing tf-idf weights
     doc_sumsq: Dict[DocID, float] = {}
     num_terms = 0
     for fname in os.listdir(terms_dir):
@@ -189,14 +191,12 @@ def merge_blocks(block_dir: str, index_dir: str, total_docs: int | None = None) 
 
     doc_norms = {docid: math.sqrt(s) for docid, s in doc_sumsq.items()}
 
-    # For very large collections, shard doc_norms across files to avoid huge meta.json
-    SHARD_THRESHOLD = 50000  # number of docs above which we shard
+    SHARD_THRESHOLD = 50000
     if len(doc_norms) > SHARD_THRESHOLD:
         shard_dir = os.path.join(index_dir, 'doc_norms')
         _ensure_dir(shard_dir)
-        shard_count = 256  # 2-hex prefix shards
+        shard_count = 256
 
-        # Prepare in-memory buckets per shard
         buckets: List[Dict[str, float]] = [dict() for _ in range(shard_count)]
         import hashlib
 
@@ -208,7 +208,6 @@ def merge_blocks(block_dir: str, index_dir: str, total_docs: int | None = None) 
             idx = shard_index(docid)
             buckets[idx][docid] = norm
 
-        # Write shards
         for i, bucket in enumerate(buckets):
             if not bucket:
                 continue
@@ -226,8 +225,13 @@ def merge_blocks(block_dir: str, index_dir: str, total_docs: int | None = None) 
 
 
 def load_term_postings(index_dir: str, term: str) -> Tuple[int, List[Tuple[DocID, int]]]:
+    """Carga las postings de un término desde el índice en disco.
+    
+    Returns:
+        Tupla (df, postings) donde df es la frecuencia de documento y
+        postings es una lista de (docid, tf).
+    """
     terms_dir = os.path.join(index_dir, 'terms')
-    # term filenames are URL-quoted
     safe_term = urllib.parse.quote_plus(term)
     pf = os.path.join(terms_dir, f"{safe_term}.json")
     if not os.path.exists(pf):
@@ -239,11 +243,19 @@ def load_term_postings(index_dir: str, term: str) -> Tuple[int, List[Tuple[DocID
 
 
 def search_topk(index_dir: str, query: str, k: int = 10, do_stem: bool = False) -> List[Tuple[DocID, float]]:
-    """Compute top-k by cosine similarity using on-disk term files.
+    """Calcula los top-k documentos más relevantes usando similitud coseno.
 
-    This function reads postings only for the query terms.
+    Lee solo las postings de los términos de la consulta desde disco.
+    
+    Args:
+        index_dir: Directorio del índice SPIMI.
+        query: Cadena de consulta.
+        k: Número de resultados a retornar.
+        do_stem: Si aplicar stemming.
+    
+    Returns:
+        Lista de tuplas (docid, score) ordenada por score descendente.
     """
-    # load meta
     meta_path = os.path.join(index_dir, 'meta.json')
     if not os.path.exists(meta_path):
         return []
@@ -257,15 +269,12 @@ def search_topk(index_dir: str, query: str, k: int = 10, do_stem: bool = False) 
     if not q_terms:
         return []
 
-    # query tf
     q_tf: Dict[str, int] = {}
     for t in q_terms:
         q_tf[t] = q_tf.get(t, 0) + 1
 
-    # compute query weights
     q_weights: Dict[str, float] = {}
     for t, tf in q_tf.items():
-        # load df
         df, postings = load_term_postings(index_dir, t)
         if df == 0:
             continue
@@ -276,7 +285,6 @@ def search_topk(index_dir: str, query: str, k: int = 10, do_stem: bool = False) 
     if not q_weights:
         return []
 
-    # accumulate dot-products
     scores: Dict[DocID, float] = {}
     for t, qw in q_weights.items():
         df, postings = load_term_postings(index_dir, t)
@@ -288,9 +296,7 @@ def search_topk(index_dir: str, query: str, k: int = 10, do_stem: bool = False) 
             w = tfw * idf
             scores[docid] = scores.get(docid, 0.0) + qw * w
 
-    # divide by document norms
     doc_norms = meta.get('doc_norms', {})
-    # If sharded, load only shards needed for docs present in scores
     if meta.get('doc_norms_sharded'):
         import hashlib
         shard_dir = os.path.join(index_dir, 'doc_norms')

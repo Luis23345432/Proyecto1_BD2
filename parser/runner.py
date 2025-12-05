@@ -1,3 +1,11 @@
+"""Función de alto nivel para ejecutar SQL completo.
+
+Integra tokenización, parsing, planificación y ejecución:
+- Obtiene o crea la base de datos del usuario.
+- Parsea la sentencia SQL.
+- Planifica y ejecuta la consulta.
+- Retorna resultados en formato diccionario.
+"""
 from __future__ import annotations
 
 from typing import Any, Dict
@@ -9,6 +17,17 @@ from .executor import QueryExecutor
 
 
 def run_sql(root_dir: str, user_id: str, db_name: str, sql: str) -> Dict[str, Any]:
+    """Ejecuta una sentencia SQL completa.
+    
+    Args:
+        root_dir: Directorio raíz del motor de base de datos.
+        user_id: Identificador del usuario.
+        db_name: Nombre de la base de datos.
+        sql: Sentencia SQL a ejecutar.
+    
+    Returns:
+        Diccionario con los resultados de la ejecución.
+    """
     eng = DatabaseEngine(root_dir)
     db = eng.get_database(user_id, db_name)
     if db is None:

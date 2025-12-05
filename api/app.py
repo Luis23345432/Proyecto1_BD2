@@ -1,3 +1,10 @@
+"""
+Aplicación FastAPI del backend BD2.
+
+Expone rutas para gestión de usuarios, bases de datos, tablas,
+registros, consultas SQL, importación CSV, SPIMI y multimedia.
+Configura CORS para desarrollo local o según variables de entorno.
+"""
 from __future__ import annotations
 
 import os
@@ -16,7 +23,7 @@ from .spimi import router as spimi_router
 def create_app() -> FastAPI:
     app = FastAPI(title="Proyecto BD2 Backend", version="1.0.0")
 
-    # CORS (default to local dev). You can override via env CORS_ALLOWED_ORIGINS (comma-separated)
+    # Configura CORS: por defecto orígenes locales; puede ajustarse por env
     env_origins = os.getenv("CORS_ALLOWED_ORIGINS")
     if env_origins:
         allowed_origins = [o.strip() for o in env_origins.split(",") if o.strip()]
@@ -28,13 +35,13 @@ def create_app() -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=allowed_origins,     # no "*" when credentials=True
-        allow_credentials=True,            # set to False if you don't use cookies/auth
+        allow_origins=allowed_origins,
+        allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["*"],               # or list what you actually send
+        allow_headers=["*"],
     )
 
-    # Routers
+    # Registro de routers del sistema
     app.include_router(users_router)
     app.include_router(db_router)
     app.include_router(tables_router)

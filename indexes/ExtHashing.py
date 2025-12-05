@@ -1,3 +1,11 @@
+"""Índice de hashing extensible con buckets dinámicos.
+
+Implementa un índice basado en hashing extensible que soporta:
+- Búsqueda por clave con acceso directo mediante función hash.
+- Crecimiento dinámico del directorio y división de buckets cuando se llenan.
+- Persistencia en JSON para almacenamiento y recuperación del índice.
+- Registro de métricas de lectura/escritura y tiempos de operación.
+"""
 from __future__ import annotations
 
 import json
@@ -8,10 +16,14 @@ from metrics import stats
 
 
 class _Bucket:
+    """Bucket de almacenamiento para el índice hash extensible.
+    
+    Cada bucket mantiene un mapeo de claves a listas de registros y
+    tiene una profundidad local que determina su expansión.
+    """
     def __init__(self, local_depth: int, capacity: int = 8):
         self.local_depth = local_depth
         self.capacity = capacity
-        # map key -> list[record]
         self.map: Dict[Any, List[Any]] = {}
 
     def size(self) -> int:
@@ -35,84 +47,89 @@ class _Bucket:
 
 
 class ExtHashing(IndexInterface):
+    """Índice de hashing extensible con crecimiento dinámico.
+    
+    Mantiene un directorio de punteros a buckets y soporta división
+    de buckets cuando se llenan, duplicando el directorio si es necesario.
+    """
     def __init__(self, is_clustered: bool = False, global_depth: int = 2, bucket_capacity: int = 8):
         self.is_clustered = is_clustered
         self.global_depth = max(1, int(global_depth))
         self.bucket_capacity = int(bucket_capacity)
         self.buckets: List[_Bucket] = []
-        # directory: list of bucket indices of length 2^global_depth
         self.directory: List[int] = []
-        # init
         self._init_empty()
 
-    # initialization helpers
     def _init_empty(self) -> None:
+        """Inicializa el índice vacío con buckets y directorio inicial."""
         self.buckets = []
-        # create 2^D buckets initially
         num = 1 << self.global_depth
         for _ in range(num):
             self.buckets.append(_Bucket(local_depth=self.global_depth, capacity=self.bucket_capacity))
         self.directory = list(range(num))
 
-    # hashing helpers
     def _hash(self, key: Any) -> int:
         h = hash(json.dumps(key, ensure_ascii=False))
         mask = (1 << self.global_depth) - 1
         return h & mask
 
     def _bucket_index_for(self, key: Any) -> int:
+        """Determina el índice del bucket para una clave dada."""
         hv = self._hash(key)
         return self.directory[hv]
 
-    # IndexInterface
     def search(self, key: Any) -> List[Any]:
+        """Busca todos los registros asociados a una clave."""
         stats.inc("index.hash.search")
-        stats.inc("disk.reads")  # ← AGREGAR: leer bucket del directorio
+        stats.inc("disk.reads")
 
-        with stats.timer("index.hash.search.time"):  # ← AGREGAR timer
+        with stats.timer("index.hash.search.time"):
             bidx = self._bucket_index_for(key)
             result = self.buckets[bidx].search(key)
 
         return result
 
     def range_search(self, begin_key: Any, end_key: Any) -> List[Any]:
+        """Búsqueda por rango no soportada eficientemente en hash."""
         stats.inc("index.hash.range")
-        # Not supported efficiently
         return []
 
     def add(self, key: Any, record: Any) -> bool:
+        """Agrega un registro al índice hash.
+        
+        Si el bucket está lleno, lo divide y redistribuye las entradas.
+        """
         stats.inc("index.hash.add")
-        stats.inc("disk.reads")  # ← AGREGAR: leer bucket
+        stats.inc("disk.reads")
 
-        with stats.timer("index.hash.add.time"):  # ← AGREGAR timer
+        with stats.timer("index.hash.add.time"):
             bidx = self._bucket_index_for(key)
             bucket = self.buckets[bidx]
 
             if not bucket.is_full() or key in bucket.map:
                 bucket.add(key, record)
-                stats.inc("disk.writes")  # ← AGREGAR: escribir bucket
+                stats.inc("disk.writes")
                 return True
 
-            # split if full and no room
             self._split_bucket(bidx)
 
-            # retry insert
             bidx2 = self._bucket_index_for(key)
             self.buckets[bidx2].add(key, record)
-            stats.inc("disk.writes")  # ← AGREGAR: escribir después de split
+            stats.inc("disk.writes")
 
         return True
 
     def remove(self, key: Any) -> bool:
+        """Elimina todas las entradas asociadas a una clave."""
         stats.inc("index.hash.remove")
-        stats.inc("disk.reads")  # ← AGREGAR: leer bucket
+        stats.inc("disk.reads")
 
-        with stats.timer("index.hash.remove.time"):  # ← AGREGAR timer
+        with stats.timer("index.hash.remove.time"):
             bidx = self._bucket_index_for(key)
             result = self.buckets[bidx].remove(key)
 
             if result:
-                stats.inc("disk.writes")  # ← AGREGAR: escribir cambios
+                stats.inc("disk.writes")
 
         return result
 
@@ -125,9 +142,9 @@ class ExtHashing(IndexInterface):
             "directory_entries": len(self.directory),
         }
 
-    # splitting / directory doubling
     def _split_bucket(self, bidx: int) -> None:
-        stats.inc("disk.writes", 2)  # ← AGREGAR: split implica 2 escrituras (bucket viejo + nuevo)
+        """Divide un bucket lleno y redistribuye sus entradas."""
+        stats.inc("disk.writes", 2)
 
         bucket = self.buckets[bidx]
         if bucket.local_depth == self.global_depth:
@@ -155,19 +172,19 @@ class ExtHashing(IndexInterface):
         bucket.map.clear()
 
         for k, v in items:
-            stats.inc("disk.reads")  # ← AGREGAR: leer durante redistribución
+            stats.inc("disk.reads")
             idx = self._bucket_index_for(k)
             self.buckets[idx].add(k, v)
 
     def _double_directory(self) -> None:
-        stats.inc("disk.writes")  # ← AGREGAR: duplicar directorio requiere escritura
+        """Duplica el tamaño del directorio cuando es necesario."""
+        stats.inc("disk.writes")
         old_dir = self.directory
         self.global_depth += 1
         self.directory = old_dir + old_dir[:]
 
-    # persistence (JSON)
     def save_idx(self, path: str) -> None:
-        # Properly encode bucket maps
+        """Guarda el índice hash en un archivo JSON."""
         b_arr = []
         for b in self.buckets:
             enc_map: Dict[str, List[Any]] = {}
@@ -191,6 +208,7 @@ class ExtHashing(IndexInterface):
 
     @classmethod
     def load_idx(cls, path: str) -> "ExtHashing":
+        """Carga el índice hash desde un archivo JSON."""
         with open(path, "r", encoding="utf-8") as f:
             blob = json.load(f)
         meta = blob.get("meta", {})
@@ -208,7 +226,6 @@ class ExtHashing(IndexInterface):
             bk.map = dec_map
             inst.buckets.append(bk)
         inst.directory = list(blob.get("directory", list(range(1 << inst.global_depth))))
-        # if buckets list was empty (corrupt), re-init
         if not inst.buckets:
             inst._init_empty()
         return inst

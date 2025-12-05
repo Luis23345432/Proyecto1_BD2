@@ -1,3 +1,7 @@
+/**
+ * Página principal de login.
+ * Redirige automáticamente al DBMS si el usuario ya está autenticado.
+ */
 "use client"
 
 import { useEffect } from "react"

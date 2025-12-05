@@ -1,3 +1,10 @@
+"""
+Endpoint de ejecución SQL con métricas.
+
+Valida acceso del usuario, ejecuta consultas y reporta tiempos,
+lecturas/escrituras simuladas y operaciones de índices activos
+por columna. Integra con el parser y motor de bases de datos.
+"""
 from __future__ import annotations
 
 import os
@@ -8,7 +15,7 @@ from .schemas import SQLQuery
 from .auth import get_current_user
 from parser import run_sql
 from metrics import stats
-from engine import DatabaseEngine  # ← AGREGAR para acceder a la tabla
+from engine import DatabaseEngine
 
 router = APIRouter(prefix="/users/{user_id}/databases/{db_name}", tags=["sql"])
 
@@ -24,10 +31,9 @@ def _verify_user_access(user_id: str, current_user: str = Depends(get_current_us
 
 def _get_active_indexes(root: str, user_id: str, db_name: str, sql: str) -> dict:
     try:
-        # Extraer nombre de tabla del SQL (simplificado)
+        # Extraer nombre de tabla de SQL (simplificado)
         sql_upper = sql.upper()
 
-        # Patrones comunes
         if "FROM" in sql_upper:
             parts = sql_upper.split("FROM")[1].strip().split()
             table_name = parts[0].strip().rstrip(";")
@@ -40,7 +46,6 @@ def _get_active_indexes(root: str, user_id: str, db_name: str, sql: str) -> dict
         else:
             return {}
 
-        # Obtener la tabla
         engine = DatabaseEngine(root)
         db = engine.get_database(user_id, db_name)
         if not db:
@@ -50,7 +55,7 @@ def _get_active_indexes(root: str, user_id: str, db_name: str, sql: str) -> dict
         if not t:
             return {}
 
-        # Retornar mapa de columna -> tipo de índice
+        # Mapa columna -> tipo de índice
         return {col: idx_type.name.lower() for col, idx_type in t.schema.indexes.items()}
 
     except Exception as e:
@@ -65,10 +70,9 @@ def _build_index_metrics(active_indexes: dict) -> dict:
     index_metrics = {}
 
     for col_name, idx_type in active_indexes.items():
-        # Recopilar todas las operaciones
+        # Recopilar métricas por operación
         operations = {}
 
-        # Búsqueda
         search_count = stats.get_counter(f"index.{idx_type}.search")
         search_time = stats.get_time_ms(f"index.{idx_type}.search.time")
         if search_count > 0 or search_time > 0:
@@ -77,7 +81,6 @@ def _build_index_metrics(active_indexes: dict) -> dict:
                 "time_ms": round(search_time, 3)
             }
 
-        # Rango
         range_count = stats.get_counter(f"index.{idx_type}.range")
         range_time = stats.get_time_ms(f"index.{idx_type}.range.time")
         if range_count > 0 or range_time > 0:
@@ -86,7 +89,6 @@ def _build_index_metrics(active_indexes: dict) -> dict:
                 "time_ms": round(range_time, 3)
             }
 
-        # Inserción
         add_count = stats.get_counter(f"index.{idx_type}.add")
         add_time = stats.get_time_ms(f"index.{idx_type}.add.time")
         if add_count > 0 or add_time > 0:
@@ -95,7 +97,6 @@ def _build_index_metrics(active_indexes: dict) -> dict:
                 "time_ms": round(add_time, 3)
             }
 
-        # Eliminación
         remove_count = stats.get_counter(f"index.{idx_type}.remove")
         remove_time = stats.get_time_ms(f"index.{idx_type}.remove.time")
         if remove_count > 0 or remove_time > 0:
@@ -104,7 +105,6 @@ def _build_index_metrics(active_indexes: dict) -> dict:
                 "time_ms": round(remove_time, 3)
             }
 
-        # Operaciones especiales de RTree
         if idx_type == "rtree":
             radius_count = stats.get_counter(f"index.{idx_type}.range_radius")
             radius_time = stats.get_time_ms(f"index.{idx_type}.range_radius.time")
@@ -122,7 +122,6 @@ def _build_index_metrics(active_indexes: dict) -> dict:
                     "time_ms": round(knn_time, 3)
                 }
 
-        # Solo agregar el índice si tiene operaciones
         if operations:
             index_metrics[col_name] = {
                 "type": idx_type,
@@ -141,37 +140,32 @@ def sql_query(
 ):
     root = os.path.dirname(os.path.dirname(__file__))
 
-    # Resetear métricas y medir tiempo
     start_time = time.perf_counter()
     stats.reset()
 
+    # Log básico de ejecución
     print(f"🔍 SQL: Ejecutando query: {payload.sql}")
 
     try:
-        # Detectar índices activos de la tabla
         active_indexes = _get_active_indexes(root, user_id, db_name, payload.sql)
         print(f"🔍 SQL: Índices activos detectados: {active_indexes}")
 
-        # Ejecutar la query
         out = run_sql(root, user_id, db_name, payload.sql)
 
-        # Calcular tiempo de ejecución
         execution_time_ms = (time.perf_counter() - start_time) * 1000
 
         print(f"🔍 SQL: Query ejecutada exitosamente")
         print(f"🔍 SQL: stats.counters = {stats.counters}")
 
-        # Construir métricas inteligentes
         index_metrics = _build_index_metrics(active_indexes)
 
-        # Enriquecer respuesta con métricas
         if isinstance(out, dict):
             out["execution_time_ms"] = round(execution_time_ms, 2)
             out["metrics"] = {
                 "total_disk_accesses": stats.get_counter("disk.reads") + stats.get_counter("disk.writes"),
                 "disk_reads": stats.get_counter("disk.reads"),
                 "disk_writes": stats.get_counter("disk.writes"),
-                "indexes": index_metrics  # ← Solo índices usados con operaciones activas
+                "indexes": index_metrics
             }
         else:
             out = {

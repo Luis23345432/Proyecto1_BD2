@@ -1,3 +1,8 @@
+"""Módulo de tipos y conversiones de datos.
+
+Define los tipos de columnas soportados (INT, VARCHAR, DATE, FLOAT, ARRAY_FLOAT),
+tipos de índices disponibles y funciones de conversión/validación de valores.
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -8,6 +13,7 @@ import json
 
 
 class ColumnType(Enum):
+    """Enumeración de tipos de datos soportados para columnas."""
     INT = auto()
     VARCHAR = auto()
     DATE = auto()
@@ -16,6 +22,7 @@ class ColumnType(Enum):
 
 
 class IndexType(Enum):
+    """Enumeración de tipos de índices soportados para columnas."""
     BTREE = auto()
     ISAM = auto()
     AVL = auto()
@@ -26,12 +33,14 @@ class IndexType(Enum):
 
 
 def _to_int(v: Any) -> int:
+    """Convierte un valor a entero, validando que no sea nulo o vacío."""
     if v is None or v == "":
         raise ValueError("valor INT vacío")
     return int(v)
 
 
 def _to_float(v: Any) -> float:
+    """Convierte un valor a float, aceptando comas como separador decimal."""
     if v is None or v == "":
         raise ValueError("valor FLOAT vacío")
     if isinstance(v, str):
@@ -40,13 +49,12 @@ def _to_float(v: Any) -> float:
 
 
 def _to_date(v: Any) -> str:
-    # retorna ISO (YYYY-MM-DD)
+    """Convierte un valor a fecha en formato ISO (YYYY-MM-DD)."""
     if v is None or v == "":
         raise ValueError("valor DATE vacío")
     if isinstance(v, datetime):
         return v.strftime("%Y-%m-%d")
     s = str(v).strip()
-    # admitir YYYY-MM-DD
     try:
         dt = datetime.strptime(s, "%Y-%m-%d")
         return dt.strftime("%Y-%m-%d")
@@ -55,6 +63,7 @@ def _to_date(v: Any) -> str:
 
 
 def _to_varchar(v: Any, max_len: Optional[int]) -> str:
+    """Convierte un valor a cadena de texto, aplicando longitud máxima si se especifica."""
     s = "" if v is None else str(v)
     if max_len is not None and max_len > 0:
         return s[:max_len]
@@ -62,23 +71,20 @@ def _to_varchar(v: Any, max_len: Optional[int]) -> str:
 
 
 def _to_array_float(v: Any) -> List[float]:
-    # CRÍTICO: NO llamar a str() si ya es lista
+    """Convierte un valor a lista de floats, aceptando listas, JSON strings o valores separados por comas."""
     if v is None:
         return []
 
-    # Si ya es lista o tupla, convertir elementos a float
     if isinstance(v, (list, tuple)):
         result = [float(x) for x in v]
         print(f"DEBUG _to_array_float: recibió lista, retornando: {result}, tipo: {type(result)}")
         return result
 
-    # Si es string, intentar parsearlo
     if isinstance(v, str):
         s = v.strip()
         if not s:
             return []
 
-        # Caso 1: String JSON "[1.0, 2.0]"
         if s.startswith('[') and s.endswith(']'):
             try:
                 parsed = json.loads(s)
@@ -87,16 +93,15 @@ def _to_array_float(v: Any) -> List[float]:
             except:
                 pass
 
-        # Caso 2: String separado por comas "1.0, 2.0"
         parts = [p.strip() for p in s.split(',')]
         return [float(p) for p in parts if p]
 
-    # Fallback: retornar vacío
     print(f"WARNING _to_array_float: tipo inesperado {type(v)}, valor: {v}")
     return []
 
 
 def convert_value(col_type: ColumnType, value: Any, *, max_len: Optional[int] = None) -> Any:
+    """Convierte y valida un valor según el tipo de columna especificado."""
     if col_type == ColumnType.INT:
         return _to_int(value)
     if col_type == ColumnType.FLOAT:

@@ -1,3 +1,8 @@
+"""Endpoints de la API para índices de texto completo SPIMI.
+
+Permite construir y consultar índices invertidos usando el algoritmo
+SPIMI (Single-Pass In-Memory Indexing) con soporte para múltiples columnas.
+"""
 from __future__ import annotations
 
 import os
@@ -27,6 +32,7 @@ def build_index(
     block_max_docs: int = Query(500, description="Max docs per SPIMI block"),
     current_user: str = Depends(_verify_user_access),
 ):
+    """Construye un índice SPIMI para una o más columnas de texto."""
     engine = DatabaseEngine(os.path.dirname(os.path.dirname(__file__)))
     db = engine.get_database(user_id, db_name)
     if db is None:
@@ -35,20 +41,17 @@ def build_index(
     if table is None:
         raise HTTPException(status_code=404, detail="Table not found")
 
-    # Prepare paths
     table_dir = table.base_dir
     block_dir = os.path.join(table_dir, "spimi_blocks")
     index_dir = os.path.join(table_dir, "spimi_index")
     os.makedirs(block_dir, exist_ok=True)
     os.makedirs(index_dir, exist_ok=True)
 
-    # Iterate datafile and provide pairs (text, rid)
     try:
         pc = table.datafile.page_count()
     except Exception:
         raise HTTPException(status_code=400, detail="No pages in datafile")
 
-    # Decide input mode (single column vs multi-column concatenation)
     use_columns = [c for c in (columns or []) if (c or '').strip()]
     if not use_columns and not column:
         raise HTTPException(status_code=400, detail="Provide 'column' or 'columns' to build the index")
@@ -101,6 +104,7 @@ def spimi_search(
     k: int = Query(10, ge=1, le=100),
     current_user: str = Depends(_verify_user_access),
 ):
+    """Busca documentos relevantes usando el índice SPIMI con ranking TF-IDF."""
     engine = DatabaseEngine(os.path.dirname(os.path.dirname(__file__)))
     db = engine.get_database(user_id, db_name)
     if db is None:
@@ -117,7 +121,6 @@ def spimi_search(
 
     out: List[Dict[str, Any]] = []
     for docid, score in results:
-        # docid format "page_slot"
         try:
             page_str, slot_str = docid.split("_")
             rid = (int(page_str), int(slot_str))

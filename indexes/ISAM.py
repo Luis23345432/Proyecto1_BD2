@@ -1,3 +1,12 @@
+"""Índice ISAM (Indexed Sequential Access Method).
+
+Implementa un índice estático con páginas de datos ordenadas y
+cadenas de overflow para inserciones dinámicas:
+- Estructura de dos niveles: directorio de claves y páginas de datos.
+- Búsqueda eficiente por clave o rango usando el directorio.
+- Cadenas de overflow para manejar inserciones sin reconstruir el índice.
+- Persistencia en JSON para almacenamiento y recuperación.
+"""
 from __future__ import annotations
 
 import bisect
@@ -12,6 +21,11 @@ from metrics import stats
 
 @dataclass
 class ISAMPage:
+    """Página de datos para el índice ISAM.
+    
+    Contiene registros ordenados y puede enlazar a páginas de overflow
+    cuando se llena.
+    """
     page_size: int
     records: List[Any] = field(default_factory=list)
     next_overflow: Optional[ISAMPage] = None
@@ -34,73 +48,56 @@ class ISAMPage:
 
 
 class ISAM(IndexInterface):
+    """Índice ISAM con estructura estática y cadenas de overflow.
+    
+    Mantiene un directorio de claves que delimitan páginas de datos.
+    Las inserciones se agregan a páginas de overflow si las páginas
+    base están llenas.
+    """
     def __init__(self,
                  page_size: int = 10,
                  is_clustered: bool = False,
                  idx_path: Optional[str] = None):
-        self.page_size = page_size  # factor de bloque
+        self.page_size = page_size
         self.is_clustered = is_clustered
         self.idx_path = idx_path
 
-        # Nivel 1: Índice (directorio ordenado de keys)
-        self.keys: List[Any] = []  # keys que delimitan cada página
-
-        # Nivel 2: Páginas de datos (estructura estática después del build)
+        self.keys: List[Any] = []
         self.pages: List[ISAMPage] = []
-
-        # Overflow: páginas encadenadas por índice de página base
         self.overflow_chains: Dict[int, ISAMPage] = {}
 
     def _find_page_index(self, key: Any) -> int:
+        """Encuentra el índice de la página base para una clave dada."""
         if not self.keys:
             return 0
-        stats.inc("disk.reads")  # lectura del índice (nivel 1)
+        stats.inc("disk.reads")
         i = bisect.bisect_right(self.keys, key)
         return max(0, i - 1) if i > 0 else 0
 
     def search(self, key: Any) -> List[Any]:
+        """Busca todos los registros con una clave específica.
+        
+        Busca en la página base correspondiente y sus páginas de overflow.
+        """
         stats.inc("index.isam.search")
 
         with stats.timer("index.isam.search.time"):
             page_idx = self._find_page_index(key)
             out: List[Any] = []
 
-            # 🐛 DEBUG TEMPORAL
-            print(f"\n🔍 DEBUG ISAM.search(key={key})")
-            print(f"   Total páginas: {len(self.pages)}")
-            print(f"   Keys índice: {self.keys}")
-            print(f"   Página seleccionada: {page_idx}")
-            print(f"   Overflow chains: {list(self.overflow_chains.keys())}")
-
-            # Buscar en página base
             if page_idx < len(self.pages):
                 stats.inc("disk.reads")
                 page = self.pages[page_idx]
 
-                print(f"   📄 Registros en página base {page_idx}: {len(page.records)}")
-                if page.records:
-                    print(f"   📝 Primeros 3 records: {page.records[:3]}")
-                    print(f"   🔑 Key del primer record: {self._extract_key(page.records[0])}")
-
                 for record in page.records:
                     extracted_key = self._extract_key(record)
-                    matches = extracted_key == key
-                    print(
-                        f"      Comparando: {extracted_key} == {key} ? {matches} (tipos: {type(extracted_key)} vs {type(key)})")
-                    if matches:
+                    if extracted_key == key:
                         if isinstance(record, tuple) and len(record) == 2:
                             out.append(record[1])
-                            print(f"      ✅ Match! Agregando RID: {record[1]}")
                         else:
                             out.append(record)
 
-                # Buscar en overflow
                 current_overflow = self.overflow_chains.get(page_idx)
-                if current_overflow:
-                    print(f"   🔗 Revisando overflow de página {page_idx}")
-                while current_overflow:
-                    stats.inc("disk.reads")
-                    print(f"      Overflow tiene {len(current_overflow.records)} registros")
                     for record in current_overflow.records:
                         extracted_key = self._extract_key(record)
                         if extracted_key == key:
@@ -110,36 +107,32 @@ class ISAM(IndexInterface):
                                 out.append(record)
                     current_overflow = current_overflow.next_overflow
 
-            print(f"   🎯 Total resultados: {len(out)}\n")
             return out
 
     def range_search(self, begin_key: Any, end_key: Any) -> List[Any]:
+        """Busca todos los registros en un rango de claves [begin_key, end_key]."""
         stats.inc("index.isam.range")
 
         with stats.timer("index.isam.range.time"):
             start_page_idx = self._find_page_index(begin_key)
             out: List[Any] = []
 
-            # Recorrer páginas en el rango
             page_idx = start_page_idx
             while page_idx < len(self.pages):
-                stats.inc("disk.reads")  # leer página base
+                stats.inc("disk.reads")
                 page = self.pages[page_idx]
 
-                # Revisar si ya pasamos el rango
                 if page_idx < len(self.keys) and self.keys[page_idx] > end_key:
                     break
 
-                # Agregar registros en rango de la página base
                 for record in page.records:
                     k = self._extract_key(record)
                     if begin_key <= k <= end_key:
                         out.append(record)
 
-                # Revisar overflow de esta página
                 current_overflow = self.overflow_chains.get(page_idx)
                 while current_overflow:
-                    stats.inc("disk.reads")  # leer página overflow
+                    stats.inc("disk.reads")
                     for record in current_overflow.records:
                         k = self._extract_key(record)
                         if begin_key <= k <= end_key:
@@ -151,15 +144,16 @@ class ISAM(IndexInterface):
         return out
 
     def add(self, key: Any, record_or_value: Any) -> bool:
+        """Agrega un registro al índice ISAM.
+        
+        Si la página base está llena, crea o usa cadenas de overflow.
+        """
         stats.inc("index.isam.add")
 
         with stats.timer("index.isam.add.time"):
-            # Envolver en tupla (key, value) para consistencia
             record_tuple = (key, record_or_value)
 
-            # CASO 1: Índice completamente vacío (primera inserción)
             if not self.pages and not self.keys:
-                print(f"🔨 Primera inserción en ISAM, creando página base (key={key})")
                 self.keys.append(key)
                 new_page = ISAMPage(self.page_size)
                 new_page.add_record(record_tuple)
@@ -167,24 +161,18 @@ class ISAM(IndexInterface):
                 stats.inc("disk.writes")
                 return True
 
-            # CASO 2: Hay páginas base, buscar dónde insertar
             page_idx = self._find_page_index(key)
 
             if page_idx >= len(self.pages):
                 page_idx = len(self.pages) - 1
 
-            # Intentar insertar en página base SI NO ESTÁ LLENA
             base_page = self.pages[page_idx]
             if not base_page.is_full():
                 if base_page.add_record(record_tuple):
                     stats.inc("disk.writes")
-                    print(f"✅ Insertado en página base {page_idx} (key={key})")
                     return True
 
-            # CASO 3: Página base llena
-            # Opción A: Crear nueva página base si la key es mayor que todas
             if page_idx == len(self.pages) - 1 and key > self.keys[-1]:
-                print(f"🔨 Key {key} mayor que todas, creando nueva página base")
                 self.keys.append(key)
                 new_page = ISAMPage(self.page_size)
                 new_page.add_record(record_tuple)
@@ -192,15 +180,12 @@ class ISAM(IndexInterface):
                 stats.inc("disk.writes")
                 return True
 
-            # Opción B: Ir a overflow si la página está llena
-            print(f"⚠️ Página base {page_idx} llena, insertando en overflow (key={key})")
             if page_idx not in self.overflow_chains:
                 stats.inc("disk.writes")
                 self.overflow_chains[page_idx] = ISAMPage(self.page_size)
                 self.overflow_chains[page_idx].add_record(record_tuple)
                 return True
 
-            # Buscar espacio en cadena de overflow
             current = self.overflow_chains[page_idx]
             while True:
                 if current.add_record(record_tuple):
@@ -216,6 +201,7 @@ class ISAM(IndexInterface):
                 current = current.next_overflow
 
     def remove(self, key: Any) -> bool:
+        """Elimina todos los registros con una clave específica."""
         stats.inc("index.isam.remove")
 
         with stats.timer("index.isam.remove.time"):
@@ -223,45 +209,38 @@ class ISAM(IndexInterface):
             removed = False
 
             if page_idx < len(self.pages):
-                # Remover de página base
-                stats.inc("disk.reads")  # leer página
+                stats.inc("disk.reads")
                 page = self.pages[page_idx]
                 original_len = len(page.records)
                 page.records = [r for r in page.records if self._extract_key(r) != key]
                 if len(page.records) < original_len:
-                    stats.inc("disk.writes")  # actualizar página
+                    stats.inc("disk.writes")
                     removed = True
 
-                # Remover de overflow
                 if page_idx in self.overflow_chains:
                     current = self.overflow_chains[page_idx]
                     while current:
-                        stats.inc("disk.reads")  # leer overflow
+                        stats.inc("disk.reads")
                         original_len = len(current.records)
                         current.records = [r for r in current.records if self._extract_key(r) != key]
                         if len(current.records) < original_len:
-                            stats.inc("disk.writes")  # actualizar overflow
+                            stats.inc("disk.writes")
                             removed = True
                         current = current.next_overflow
 
         return removed
 
     def _extract_key(self, record: Any) -> Any:
-        # Normalizar: convertir lista a tupla si es necesario
+        """Extrae la clave de un registro, manejando diferentes formatos."""
         if isinstance(record, list):
             record = tuple(record)
 
-        # CASO 1: Es una tupla (key, rid) donde rid es otra tupla
         if isinstance(record, tuple) and len(record) == 2:
-            # Verificar si el segundo elemento es un RID (page_id, slot)
             second = record[1]
             if isinstance(second, (tuple, list)) and len(second) == 2:
-                # Es (key, (page_id, slot))
                 return record[0]
-            # Si no, asumimos que es (key, value) genérico
             return record[0]
 
-        # CASO 2: Es un dict con key explícita
         if isinstance(record, dict):
             if 'key' in record:
                 return record['key']
@@ -272,35 +251,30 @@ class ISAM(IndexInterface):
             if 'id' in record:
                 return record['id']
 
-        # CASO 3: Es el valor directo
         return record
 
     def build_from_pairs(self, pairs: List[Tuple[Any, Any]]):
+        """Construye el índice ISAM desde una lista ordenada de pares (clave, valor)."""
         if not pairs:
             return
 
-        # Ordenar por key
         pairs_sorted = sorted(pairs, key=lambda kv: kv[0])
 
-        # Crear páginas con factor de bloque
         self.keys = []
         self.pages = []
         current_page = ISAMPage(self.page_size)
 
         for key, value in pairs_sorted:
             if current_page.is_full():
-                # Guardar página actual y crear nueva
                 self.pages.append(current_page)
-                self.keys.append(key)  # key de inicio de nueva página
+                self.keys.append(key)
                 current_page = ISAMPage(self.page_size)
 
             current_page.add_record((key, value))
 
-        # Agregar última página
         if current_page.records:
             self.pages.append(current_page)
 
-        # Limpiar overflow (build desde cero)
         self.overflow_chains = {}
 
     def get_stats(self) -> dict:
@@ -330,10 +304,9 @@ class ISAM(IndexInterface):
         }
 
     def save_idx(self, path: str) -> None:
-        # Serializar páginas base
+        """Guarda el índice ISAM en un archivo JSON."""
         pages_data = [page.to_dict() for page in self.pages]
 
-        # Serializar overflow chains
         overflow_data = {}
         for page_idx, chain_head in self.overflow_chains.items():
             chain = []
@@ -359,6 +332,7 @@ class ISAM(IndexInterface):
 
     @classmethod
     def load_idx(cls, path: str) -> 'ISAM':
+        """Carga el índice ISAM desde un archivo JSON."""
         with open(path, 'r', encoding='utf-8') as f:
             blob = json.load(f)
 
@@ -369,16 +343,13 @@ class ISAM(IndexInterface):
         idx = cls(page_size=page_size, is_clustered=is_clustered, idx_path=path)
         idx.keys = list(blob.get('keys', []))
 
-        # Reconstruir páginas base
         pages_data = blob.get('pages', [])
         idx.pages = []
         for page_dict in pages_data:
             page = ISAMPage(page_dict['page_size'])
-            # 🔧 FIX: Convertir listas a tuplas
             page.records = [cls._list_to_tuple(rec) for rec in page_dict['records']]
             idx.pages.append(page)
 
-        # Reconstruir overflow chains
         overflow_data = blob.get('overflow', {})
         idx.overflow_chains = {}
         for page_idx_str, chain_data in overflow_data.items():
@@ -387,7 +358,6 @@ class ISAM(IndexInterface):
 
             for page_dict in chain_data:
                 page = ISAMPage(page_dict['page_size'])
-                # 🔧 FIX: Convertir listas a tuplas
                 page.records = [cls._list_to_tuple(rec) for rec in page_dict['records']]
 
                 if prev_page is None:

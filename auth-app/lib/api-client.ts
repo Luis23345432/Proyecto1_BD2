@@ -1,4 +1,10 @@
-// Prefer a runtime-configurable base URL; fallback to current host:8000 when in browser
+/**
+ * Cliente API para comunicación con el backend FastAPI.
+ * Gestiona autenticación, bases de datos, tablas, consultas SQL y búsquedas multimedia.
+ * La URL base se configura mediante variable de entorno o usando el host actual.
+ */
+
+// Configuración de URL base del API
 const envApiBase = (globalThis as any)?.process?.env?.NEXT_PUBLIC_API_BASE_URL as string | undefined
 const BASE_URL = envApiBase
   ? envApiBase

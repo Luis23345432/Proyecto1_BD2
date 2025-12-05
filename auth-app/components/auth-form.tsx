@@ -1,3 +1,7 @@
+/**
+ * Formulario de autenticación que maneja registro y login de usuarios.
+ * Alterna entre modos de registro y login con validación de errores.
+ */
 "use client"
 
 import type React from "react"

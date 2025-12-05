@@ -1,3 +1,10 @@
+"""Script de experimentación para evaluación de rendimiento del sistema.
+
+Realiza experimentos sistemáticos sobre búsqueda de texto completo (SPIMI)
+y recuperación multimedia (KNN secuencial vs. índice invertido) con diferentes
+tamaños de dataset. Genera un reporte JSON con tiempos de ejecución.
+"""
+
 from __future__ import annotations
 
 import os
@@ -7,7 +14,6 @@ from typing import List, Tuple
 from pathlib import Path
 import sys
 
-# Ensure repo root is on sys.path so local package imports work
 _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
@@ -25,18 +31,23 @@ from multimedia.inv_index import build_inverted_index, search_inverted
 
 
 def ensure_db_table_text(root: str, user: str, dbname: str, N: int) -> Tuple[str, str]:
-    """Create a text table and insert N synthetic rows.
-    Returns (table_name, index_dir)
+    """Crea una tabla de texto y construye un índice SPIMI sobre ella.
+    
+    Args:
+        root: Directorio raíz del proyecto
+        user: Usuario de la base de datos
+        dbname: Nombre de la base de datos
+        N: Número de documentos a insertar
+        
+    Returns:
+        Tupla (nombre_tabla, directorio_indice)
     """
     table = "DocsExp"
-    # Create DB + table
     run_sql(root, user, dbname, f"CREATE TABLE {table} (id INT KEY, title VARCHAR[64] INDEX FULLTEXT, body VARCHAR INDEX FULLTEXT)")
-    # Insert synthetic rows
     for i in range(N):
         t = f"Producto {i} oferta calidad"
         b = f"Este es un texto de prueba con amor y aventura {i}"
         run_sql(root, user, dbname, f"INSERT INTO {table} (id, title, body) VALUES ({i}, '{t}', '{b}')")
-    # Build SPIMI over concatenated columns (manual path)
     engine = DatabaseEngine(root)
     db = engine.get_database(user, dbname)
     tab = db.get_table(table)
@@ -62,7 +73,17 @@ def ensure_db_table_text(root: str, user: str, dbname: str, N: int) -> Tuple[str
 
 
 def measure_text(root: str, user: str, dbname: str, Ns: List[int], query: str) -> List[Tuple[int, float, int]]:
-    """Return [(N, ms, topk_count)] for our SPIMI implementation.
+    """Mide el rendimiento de búsqueda SPIMI para diferentes tamaños de dataset.
+    
+    Args:
+        root: Directorio raíz del proyecto
+        user: Usuario de la base de datos
+        dbname: Nombre base de la base de datos
+        Ns: Lista de tamaños de dataset a probar
+        query: Consulta de búsqueda
+        
+    Returns:
+        Lista de tuplas (N, tiempo_ms, cantidad_resultados)
     """
     results = []
     for N in Ns:
@@ -75,10 +96,16 @@ def measure_text(root: str, user: str, dbname: str, Ns: List[int], query: str) -
 
 
 def measure_multimedia_image(root: str, data_root: str, Ns: List[int]) -> List[Tuple[int, float, float]]:
-    """Return [(N, ms_seq, ms_inv)] measuring sequential vs inverted KNN.
-    Uses the first image as query.
+    """Mide rendimiento de KNN secuencial vs. índice invertido en imágenes.
+    
+    Args:
+        root: Directorio raíz del proyecto
+        data_root: Directorio con imágenes
+        Ns: Lista de tamaños de dataset a probar
+        
+    Returns:
+        Lista de tuplas (N, tiempo_ms_secuencial, tiempo_ms_invertido)
     """
-    # Collect image paths
     files = []
     for dirpath, _, filenames in os.walk(data_root):
         for f in filenames:
@@ -95,34 +122,27 @@ def measure_multimedia_image(root: str, data_root: str, Ns: List[int]) -> List[T
         if not ids:
             results.append((N, 0.0, 0.0))
             continue
-        # Train codebook (k fixed for experiment)
         samples = np.vstack(descs)
         km = train_codebook(samples, k=512, batch_size=256, seed=42)
         centroids = km.cluster_centers_.astype(np.float32)
-        # Quantize
         hists = [quantize_descriptors(d, centroids, top_m=3, sigma=1.0) for d in descs]
         df = compute_df(hists)
 
-        # Save BoW artifacts in tmp dir
         bow_dir = os.path.join(root, 'data', 'multimedia', 'image', 'bow_exp')
         os.makedirs(bow_dir, exist_ok=True)
-        # Clean previous
         for i in range(len(ids)):
             p = os.path.join(bow_dir, f"bow_{i}.npz")
             if os.path.exists(p):
                 os.remove(p)
         save_bow_artifacts(bow_dir, hists, ids, df)
 
-        # Build inverted index
         inv_dir = os.path.join(root, 'data', 'multimedia', 'image', 'inv_exp')
         os.makedirs(inv_dir, exist_ok=True)
-        # Clean previous postings
         for f in os.listdir(inv_dir):
             if f.startswith('cw_'):
                 os.remove(os.path.join(inv_dir, f))
         build_inverted_index(ids, hists, inv_dir)
 
-        # Query: first doc
         q = hists[0]
         t0 = time.perf_counter()
         _ = search_sequential(q, bow_dir, top_k=8)
@@ -135,6 +155,7 @@ def measure_multimedia_image(root: str, data_root: str, Ns: List[int]) -> List[T
 
 
 def main():
+    """Ejecuta los experimentos de texto y multimedia, generando un reporte JSON."""
     root = os.path.abspath('.')
     user = 'exp_user'
     # Text experiment

@@ -1,3 +1,9 @@
+"""Script de benchmark básico para el motor de base de datos.
+
+Evalúa el rendimiento de inserciones y consultas en tablas con índices BTREE y AVL.
+Genera métricas de tiempo y estadísticas de I/O que se exportan a CSV y JSON.
+"""
+
 import os
 import sys
 import random
@@ -15,6 +21,7 @@ DB = "bench_db"
 
 
 def reset_db():
+    """Elimina la base de datos de prueba si existe."""
     db_dir = os.path.join(ROOT, "data", "users", USER, "databases", DB)
     if os.path.exists(db_dir):
         import shutil
@@ -22,19 +29,24 @@ def reset_db():
 
 
 def rand_name(n=8):
+    """Genera un nombre aleatorio de n caracteres alfabéticos."""
     return ''.join(random.choice(string.ascii_letters) for _ in range(n))
 
 
 def run_benchmark(n_rows: int = 2000, n_queries: int = 200):
+    """Ejecuta el benchmark completo de inserciones y consultas.
+    
+    Args:
+        n_rows: Número de filas a insertar
+        n_queries: Número de consultas a ejecutar
+    """
     reset_db()
     stats.reset()
     stats.set_meta("n_rows", n_rows)
     stats.set_meta("n_queries", n_queries)
 
-    # create table employees: BTREE(id), AVL(name)
     run_sql(ROOT, USER, DB, 'CREATE TABLE employees USING INDEX btree(id), avl(name)')
 
-    # inserts
     t0 = perf_counter()
     for i in range(n_rows):
         name = rand_name()
@@ -42,7 +54,6 @@ def run_benchmark(n_rows: int = 2000, n_queries: int = 200):
         run_sql(ROOT, USER, DB, f'INSERT INTO employees VALUES (id={i}, name="{name}", score={score})')
     t_insert = perf_counter() - t0
 
-    # queries (mix of search and range)
     t0 = perf_counter()
     for _ in range(n_queries):
         if random.random() < 0.7:
@@ -55,22 +66,18 @@ def run_benchmark(n_rows: int = 2000, n_queries: int = 200):
             run_sql(ROOT, USER, DB, f'SELECT * FROM employees WHERE name BETWEEN "{lo}" AND "{hi}"')
     t_queries = perf_counter() - t0
 
-    # report
     snap = stats.snapshot()
     print("Benchmark summary:")
     print(f"rows inserted: {n_rows} in {t_insert:.4f}s")
     print(f"queries run:   {n_queries} in {t_queries:.4f}s")
 
-    # save CSV
     out_dir = os.path.join(ROOT, "benchmarks", "out")
     os.makedirs(out_dir, exist_ok=True)
     stats.save_csv(os.path.join(out_dir, "metrics.csv"))
     stats.save_json(os.path.join(out_dir, "metrics.json"))
 
-    # optional graph if matplotlib exists
     try:
-        import matplotlib.pyplot as plt  # type: ignore[reportMissingModuleSource]
-        # simple bar chart for selected counters
+        import matplotlib.pyplot as plt
         keys = [
             "io.read_page.calls", "io.write_page.calls", "io.append_page.calls",
             "index.btree.add", "index.btree.search", "index.avl.add", "index.avl.search",
@@ -84,7 +91,6 @@ def run_benchmark(n_rows: int = 2000, n_queries: int = 200):
         plt.savefig(os.path.join(out_dir, "counters.png"))
         plt.close()
     except Exception as e:
-        # silently skip if matplotlib not available
         pass
 
 

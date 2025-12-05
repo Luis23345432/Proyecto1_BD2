@@ -1,3 +1,12 @@
+"""Índice invertido para búsqueda de texto completo.
+
+Implementa tokenización, filtrado de stopwords y stemming opcional:
+- Tokeniza texto con soporte para español e inglés.
+- Filtra palabras vacías (stopwords) en ambos idiomas.
+- Aplica stemming opcional usando snowballstemmer.
+- Mantiene mapeo de términos a conjuntos de RIDs.
+- Soporta persistencia en JSON.
+"""
 from __future__ import annotations
 
 import json
@@ -8,18 +17,13 @@ from typing import Dict, Set, Tuple, List, Iterable, Any, Optional
 
 Rid = Tuple[int, int]
 
-# Expanded Spanish/English stopword list (lightweight, no external deps)
 STOPWORDS = {
-    # English
     "the","a","an","and","or","in","on","at","to","of","for","is","are","was","were","be","been","by","with","from","as","that","this","these","those","it","its","into","about","over","under","than","then","there","here","up","down","out","off","so","but","not",
-    # Spanish
     "el","la","los","las","un","una","unos","unas","y","o","u","en","de","del","al","a","por","para","con","sin","sobre","entre","tras","durante","segun","según","contra","como","que","qué","se","su","sus","tu","tus","mi","mis","nuestro","nuestra","nuestros","nuestras","vuestro","vuestra","vuestros","vuestras","lo","le","les","ya","muy","más","menos","tambien","también","pero","porque","cuando","donde","dónde","cual","cuál","cuales","cuáles","quien","quién","quienes","quiénes","esto","eso","aquello","aqui","aquí","alli","allí","allá","hoy","ayer","mañana","si","sí","no","ni","cada","casi","tal","tales","otro","otros","otra","otras","donde","desde","hasta","sino","e","ademas","además","pues","ante","bajo","cabe","era","eran","es","son","ser","será","serán"
 }
 
 TOKEN_RE = re.compile(r"\w+", flags=re.UNICODE)
 
-# Try to import snowballstemmer for robust stemming
-_STEMMER = None
 try:
     from snowballstemmer import stemmer as SnowballStemmer
     _STEMMER = SnowballStemmer("spanish")
@@ -28,11 +32,20 @@ except Exception:
 
 
 def tokenize(text: Any, *, do_stem: bool = False, normalize: bool = True) -> List[str]:
+    """Tokeniza texto en palabras, filtrando stopwords y aplicando stemming opcional.
+    
+    Args:
+        text: Texto a tokenizar.
+        do_stem: Si es True, aplica stemming a los tokens.
+        normalize: Si es True, elimina acentos para búsqueda insensible a acentos.
+    
+    Returns:
+        Lista de tokens procesados.
+    """
     if text is None:
         return []
     s = str(text)
     if normalize:
-        # Normalize to NFKD and strip diacritics so search is accent-insensitive
         try:
             s = unicodedata.normalize('NFKD', s)
             s = ''.join(ch for ch in s if not unicodedata.combining(ch))
@@ -40,53 +53,49 @@ def tokenize(text: Any, *, do_stem: bool = False, normalize: bool = True) -> Lis
             s = str(text)
     s = s.lower()
     tokens = TOKEN_RE.findall(s)
-    # filter stopwords and short tokens
     tokens = [t for t in tokens if t and t not in STOPWORDS and len(t) > 1]
     if do_stem:
         if _STEMMER is not None:
             try:
                 return _STEMMER.stemWords(tokens)
             except Exception:
-                # fallback to naive heuristic if stemmer fails
                 return [t.rstrip('s') for t in tokens]
         else:
-            # fallback lightweight heuristic (remove plural 's')
             return [t.rstrip('s') for t in tokens]
     return tokens
 
 
 class InvertedIndex:
-    """Simple on-disk inverted index.
+    """Índice invertido simple con persistencia en JSON.
 
-    Data model: a mapping term -> set of RIDs
-    Persisted as JSON: {term: [[page, slot], ...], ...}
+    Mantiene un mapeo de términos a conjuntos de RIDs (tuplas page, slot).
+    Soporta construcción incremental, búsqueda con semántica AND,
+    y persistencia en disco.
     """
 
     def __init__(self, *, do_stem: bool = False):
-        # term -> set of rid tuples
         self.index: Dict[str, Set[Rid]] = {}
-        # whether to apply stemming (uses snowballstemmer if available)
         self.do_stem: bool = bool(do_stem)
 
-    # -- mutation API -------------------------------------------------
     def add(self, text: Any, rid: Rid) -> None:
+        """Agrega un documento al índice invertido."""
         terms = tokenize(text, do_stem=self.do_stem)
         for t in terms:
             s = self.index.setdefault(t, set())
             s.add(tuple(rid))
 
     def build_from_pairs(self, pairs: Iterable[Tuple[Any, Rid]]) -> None:
+        """Construye el índice desde pares (texto, rid)."""
         self.index = {}
         for text, rid in pairs:
             self.add(text, rid)
 
     def remove(self, key: Any) -> None:
-        """Remove by text term or by rid.
-
-        If `key` is a string, remove all RIDs associated to that text (i.e. remove mapping for its tokens).
-        If `key` is a tuple/list of two ints, treat as rid and remove it from all term postings.
+        """Elimina entradas del índice.
+        
+        Si key es un RID (tupla de 2 enteros), lo elimina de todas las postings.
+        Si key es texto, elimina los términos derivados de ese texto.
         """
-        # remove by rid
         if isinstance(key, (list, tuple)) and len(key) == 2:
             rid = tuple(key)
             removed_terms = []
@@ -99,20 +108,17 @@ class InvertedIndex:
                 del self.index[t]
             return
 
-        # otherwise treat as text: remove terms derived from text
         terms = tokenize(key, do_stem=self.do_stem)
         for t in terms:
             if t in self.index:
                 del self.index[t]
 
-    # -- query API ----------------------------------------------------
     def search(self, query: Any) -> List[Rid]:
-        """Simple AND semantics: all terms in query must be present.
-
-        If query has multiple terms, return intersection of postings.
-        If no terms, return empty list.
+        """Busca documentos que contengan todos los términos de la consulta (semántica AND).
+        
+        Aplica múltiples estrategias de fallback para compatibilidad con diferentes
+        configuraciones de stemming y normalización.
         """
-        # Primary tokenization (use stored do_stem and normalize)
         terms = tokenize(query, do_stem=self.do_stem, normalize=True)
         if not terms:
             return []
@@ -131,16 +137,12 @@ class InvertedIndex:
         if res:
             return sorted(list(res))
 
-        # Fallbacks to preserve compatibility with older .idx formats
-        # 1) Try without normalizing accents (preserve accents from query)
         terms_no_norm = tokenize(query, do_stem=self.do_stem, normalize=False)
         if terms_no_norm and terms_no_norm != terms:
             res = postings_for_terms(terms_no_norm)
             if res:
                 return sorted(list(res))
 
-        # 2) If index wasn't stemmed, try stemmed variants of tokens (if stemmer available)
-        #    This helps when index was built without stemming but we receive a stemmed query or viceversa.
         def stem_list(tokens: List[str]) -> List[str]:
             if _STEMMER is not None:
                 try:
@@ -149,7 +151,6 @@ class InvertedIndex:
                     return [t.rstrip('s') for t in tokens]
             return [t.rstrip('s') for t in tokens]
 
-        # If the index is not stemmed, try stemming the query tokens
         if not self.do_stem:
             stemmed = stem_list(terms)
             if stemmed and stemmed != terms:
@@ -163,7 +164,6 @@ class InvertedIndex:
                 if res:
                     return sorted(list(res))
 
-        # 3) If index *is* stemmed but we couldn't match, attempt unstemmed tokens (query without stemming)
         if self.do_stem:
             unstemmed = tokenize(query, do_stem=False, normalize=True)
             if unstemmed and unstemmed != terms:
@@ -177,14 +177,14 @@ class InvertedIndex:
                 if res:
                     return sorted(list(res))
 
-        # No matches
         return []
 
     def get_terms(self) -> List[str]:
+        """Retorna lista ordenada de todos los términos en el índice."""
         return sorted(self.index.keys())
 
-    # -- persistence --------------------------------------------------
     def save_idx(self, path: str) -> None:
+        """Guarda el índice invertido en un archivo JSON."""
         os.makedirs(os.path.dirname(path), exist_ok=True)
         tmp = path + ".tmp"
         serializable = {t: [[r[0], r[1]] for r in sorted(list(s))] for t, s in self.index.items()}
@@ -197,13 +197,11 @@ class InvertedIndex:
         try:
             os.replace(tmp, path)
         except PermissionError:
-            # On Windows, destination file may be locked by AV/indexer; retry by removing then renaming
             try:
                 if os.path.exists(path):
                     os.remove(path)
                 os.replace(tmp, path)
             finally:
-                # Ensure temp is not left behind if something goes wrong
                 if os.path.exists(tmp):
                     try:
                         os.remove(tmp)
@@ -212,13 +210,13 @@ class InvertedIndex:
 
     @classmethod
     def load_idx(cls, path: str) -> "InvertedIndex":
+        """Carga el índice invertido desde un archivo JSON."""
         inst = cls()
         if not os.path.exists(path):
             return inst
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
-        # support new format with metadata
         if isinstance(data, dict) and "terms" in data:
             meta = data.get("_meta", {}) or {}
             inst.do_stem = bool(meta.get("do_stem", False))
@@ -227,7 +225,6 @@ class InvertedIndex:
                 inst.index[t] = {tuple(x) for x in lst}
             return inst
 
-        # fallback to old format (term -> [[p,s],...])
         for t, lst in data.items():
             inst.index[t] = {tuple(x) for x in lst}
         return inst

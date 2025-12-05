@@ -1,3 +1,7 @@
+/**
+ * Selector de tablas para una base de datos.
+ * Muestra la lista de tablas disponibles en la base de datos seleccionada.
+ */
 "use client"
 
 import { useEffect, useState } from "react"

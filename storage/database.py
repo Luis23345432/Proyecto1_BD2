@@ -1,3 +1,10 @@
+"""
+Representa una base de datos en disco con tablas.
+
+Carga y guarda metadatos, crea tablas nuevas y permite
+recuperarlas por nombre; no elimina archivos físicamente
+en `drop_table` (solo remueve del catálogo).
+"""
 from __future__ import annotations
 
 import os
@@ -9,6 +16,7 @@ from .table import Table
 
 
 class Database:
+    """Representa una base de datos en disco con catálogo de tablas."""
     def __init__(self, base_dir: str, name: str):
         self.base_dir = os.path.abspath(base_dir)
         self.name = name
@@ -18,6 +26,7 @@ class Database:
         self._load_metadata()
 
     def _load_metadata(self):
+        """Carga el catálogo desde metadata.json y reconstruye las tablas existentes."""
         if not os.path.exists(self.meta_path):
             self._save_metadata()
             return
@@ -34,6 +43,7 @@ class Database:
                 self.tables[tname] = Table(tdir, schema)
 
     def _save_metadata(self):
+        """Persiste el catálogo de tablas en disco de forma atómica."""
         os.makedirs(os.path.join(self.base_dir, "tables"), exist_ok=True)
         data = {"name": self.name, "tables": list(self.tables.keys())}
         tmp = self.meta_path + ".tmp"
@@ -42,6 +52,7 @@ class Database:
         os.replace(tmp, self.meta_path)
 
     def create_table(self, schema: TableSchema) -> Table:
+        """Crea una nueva tabla, guarda su esquema y la registra en el catálogo."""
         tdir = os.path.join(self.base_dir, "tables", schema.name)
         os.makedirs(tdir, exist_ok=True)
         schema.suggest_indexes()
@@ -52,15 +63,17 @@ class Database:
         return table
 
     def drop_table(self, name: str) -> bool:
+        """Elimina la tabla del catálogo sin borrar archivos físicos."""
         if name not in self.tables:
             return False
-        # No eliminamos los archivos físicamente en esta fase
         self.tables.pop(name)
         self._save_metadata()
         return True
 
     def get_table(self, name: str) -> Optional[Table]:
+        """Obtiene una tabla por su nombre."""
         return self.tables.get(name)
 
     def list_tables(self) -> List[str]:
+        """Retorna una lista con los nombres de todas las tablas."""
         return list(self.tables.keys())

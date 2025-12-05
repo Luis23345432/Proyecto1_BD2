@@ -1,3 +1,8 @@
+"""Endpoints de la API para importación de datos CSV.
+
+Permite cargar archivos CSV en tablas con procesamiento automático
+de tipos de datos y construcción de índices.
+"""
 from __future__ import annotations
 
 import csv
@@ -24,34 +29,25 @@ def _verify_user_access(user_id: str, current_user: str = Depends(get_current_us
 
 
 def _parse_csv_value(value: Any, column_type: str) -> Any:
-    # Handle missing values gracefully: treat None as empty string to allow type-specific defaults
+    """Convierte valores de CSV al tipo de dato apropiado según el esquema de la tabla."""
     if value is None:
         s = ""
     else:
         s = str(value)
     s = s.strip()
-    # Treat empty strings as None for numeric columns
-    # We'll handle empties below per type; keep s as "" for now
-    # Common null sentinels from CSVs
     if s.lower() in ("none", "null", "nan"):
         s = ""
 
-    # Arrays (para RTree): "[12.07, -77.05]" o "12.07, -77.05"
     if column_type == 'ARRAY_FLOAT' or (isinstance(column_type, str) and column_type.startswith('ARRAY')):
-        # Remover corchetes si existen
         s_arr = s.strip('[]')
-        # Split por comas y convertir a float
         try:
             return [float(x.strip()) for x in s_arr.split(',') if x.strip() != ""]
         except ValueError as e:
             raise ValueError(f"Cannot parse array value '{s}': {e}")
 
-    # Numeric coercion: provide safe defaults for missing/nulls
     if column_type == "INT":
-        # Return string numerics to align with table coercion expecting strings
         if s == "" or s.lower() in ("none", "null", "nan"):
             return "0"
-        # If not purely numeric, try to extract digits; else default to 0
         if not s.isdigit():
             import re
             digits = ''.join(re.findall(r"\d+", s))
@@ -60,14 +56,12 @@ def _parse_csv_value(value: Any, column_type: str) -> Any:
     if column_type == "FLOAT":
         if s == "" or s.lower() in ("none", "null", "nan"):
             return "0.0"
-        # Allow floats like '12.34', else default to 0.0
         try:
             float(s)
             return s
         except Exception:
             return "0.0"
 
-    # Para otros tipos: if empty, return empty string; else return trimmed string
     return s
 
 
@@ -80,6 +74,7 @@ async def load_csv(
         bulk: bool = Query(True, description="Use bulk insert mode (faster, recommended)"),
         current_user: str = Depends(_verify_user_access)
 ):
+    """Carga un archivo CSV en una tabla, con soporte para inserción masiva y construcción de índices."""
     engine = DatabaseEngine(os.path.dirname(os.path.dirname(__file__)))
     db = engine.get_database(user_id, db_name)
     if db is None:
@@ -90,10 +85,8 @@ async def load_csv(
         raise HTTPException(status_code=404, detail="Table not found")
 
     try:
-        # Leer CSV
         content = await file.read()
         text = content.decode("utf-8", errors="replace")
-        # Detect CSV dialect to avoid column shifts (commas inside quotes, alt delimiters)
         try:
             sample = text[:10000]
             dialect = csv.Sniffer().sniff(sample)
@@ -109,16 +102,13 @@ async def load_csv(
         lines = text.splitlines()
         reader = csv.DictReader(lines, dialect=dialect)
 
-        # Obtener tipos de columnas del schema
         column_types = {col.name: col.col_type.name for col in table.schema.columns}
 
-        # Convertir a lista de diccionarios, parseando valores especiales
         rows: List[Dict[str, Any]] = []
-        for row_num, row in enumerate(reader, start=2):  # start=2 porque línea 1 es header
+        for row_num, row in enumerate(reader, start=2):
             parsed_row = {}
             try:
                 for col_name, value in row.items():
-                    # Only process columns present in table schema; ignore extras
                     if col_name in column_types:
                         col_type = column_types[col_name]
                         parsed_row[col_name] = _parse_csv_value(value, col_type)
@@ -134,13 +124,10 @@ async def load_csv(
         if not rows:
             raise HTTPException(status_code=400, detail="CSV file is empty")
 
-        # Insertar usando bulk o incremental
         if bulk:
             rids = table.insert_bulk(rows, rebuild_indexes=True)
             inserted = len(rids)
-            # After bulk insert + index rebuild, also build SPIMI indexes for FULLTEXT columns
             try:
-                # detect fulltext columns
                 ft_cols = [c for c, t in table.schema.indexes.items() if t.name.lower() in ("fulltext", "inverted")]
                 if ft_cols:
                     for col in ft_cols:
@@ -149,7 +136,6 @@ async def load_csv(
                         os.makedirs(block_dir, exist_ok=True)
                         os.makedirs(index_dir, exist_ok=True)
 
-                        # iterate records from datafile
                         try:
                             pc = table.datafile.page_count()
                         except Exception:
@@ -168,20 +154,16 @@ async def load_csv(
 
                         total_docs = build_spimi_blocks(doc_iter(), block_dir, block_max_docs=200, do_stem=True)
                         merge_blocks(block_dir, index_dir, total_docs=total_docs)
-                        # Also create a canonical `spimi_index` path (used by the API search endpoint)
                         canonical_index = os.path.join(table.base_dir, "spimi_index")
                         try:
-                            # remove previous canonical index if exists
                             if os.path.exists(canonical_index):
                                 shutil.rmtree(canonical_index)
                             shutil.copytree(index_dir, canonical_index)
                         except Exception:
-                            # non-fatal: log and continue
                             import traceback
                             print("⚠️ Warning: couldn't copy SPIMI index to canonical path:")
                             traceback.print_exc()
             except Exception:
-                # Don't fail the CSV upload if SPIMI build fails; log for debugging
                 import traceback
                 print("⚠️ Error building SPIMI index:")
                 traceback.print_exc()
@@ -194,7 +176,7 @@ async def load_csv(
     except csv.Error as e:
         raise HTTPException(status_code=400, detail=f"CSV parsing error: {str(e)}")
     except HTTPException:
-        raise  # Re-raise HTTP exceptions
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error loading CSV: {str(e)}")
 

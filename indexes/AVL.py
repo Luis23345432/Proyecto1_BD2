@@ -1,3 +1,13 @@
+"""
+Índice AVL para búsquedas eficientes por clave.
+
+Este módulo implementa un árbol AVL con soporte para:
+- Inserción y eliminación con rebalanceo automático.
+- Búsqueda puntual y por rango.
+- Persistencia simple en JSON.
+
+Se registran métricas básicas de lecturas/escrituras y tiempos por operación.
+"""
 from typing import Any, List, Optional, Tuple
 from .bptree_adapter import IndexInterface
 from metrics import stats
@@ -28,7 +38,7 @@ def _balance(n: _AVLNode) -> int:
 
 
 def _rotate_left(z: _AVLNode) -> _AVLNode:
-    stats.inc("disk.writes")  # ← AGREGAR: rotación implica escritura
+    stats.inc("disk.writes")
     y = z.right
     if y is None:
         return z
@@ -41,7 +51,7 @@ def _rotate_left(z: _AVLNode) -> _AVLNode:
 
 
 def _rotate_right(z: _AVLNode) -> _AVLNode:
-    stats.inc("disk.writes")  # ← AGREGAR: rotación implica escritura
+    stats.inc("disk.writes")
     y = z.left
     if y is None:
         return z
@@ -54,20 +64,21 @@ def _rotate_right(z: _AVLNode) -> _AVLNode:
 
 
 class AVL(IndexInterface):
+    # Árbol AVL que actúa como índice por clave
     def __init__(self, is_clustered: bool = False):
         self.root: Optional[_AVLNode] = None
         self.is_clustered = is_clustered
 
     def _insert(self, node: Optional[_AVLNode], key: Any, val: Any) -> _AVLNode:
-        stats.inc("disk.reads")  # ← AGREGAR: leer nodo actual
+        stats.inc("disk.reads")
 
         if node is None:
-            stats.inc("disk.writes")  # ← AGREGAR: crear nuevo nodo
+            stats.inc("disk.writes")
             return _AVLNode(key, val)
 
         if key == node.key:
             node.vals.append(val)
-            stats.inc("disk.writes")  # ← AGREGAR: actualizar nodo
+            stats.inc("disk.writes")
             return node
 
         if key < node.key:
@@ -78,25 +89,25 @@ class AVL(IndexInterface):
         _update(node)
         bal = _balance(node)
 
-        # Rotaciones (ya incrementan disk.writes dentro de _rotate_*)
         if bal > 1:
             if key < (node.left.key if node.left else key):
                 return _rotate_right(node)
-            node.left = _rotate_left(node.left)  # LR
+            node.left = _rotate_left(node.left)
             return _rotate_right(node)
         if bal < -1:
             if key > (node.right.key if node.right else key):
                 return _rotate_left(node)
-            node.right = _rotate_right(node.right)  # RL
+            node.right = _rotate_right(node.right)
             return _rotate_left(node)
 
-        stats.inc("disk.writes")  # ← AGREGAR: actualizar nodo después de rebalanceo
+        stats.inc("disk.writes")
         return node
 
     def add(self, key: Any, record: Any) -> bool:
         stats.inc("index.avl.add")
 
-        with stats.timer("index.avl.add.time"):  # ← CAMBIAR: agregar timer
+        # Inserta el registro y rebalancea si es necesario
+        with stats.timer("index.avl.add.time"):
             self.root = self._insert(self.root, key, record)
 
         return True
@@ -104,7 +115,7 @@ class AVL(IndexInterface):
     def _search(self, node: Optional[_AVLNode], key: Any) -> List[Any]:
         cur = node
         while cur:
-            stats.inc("disk.reads")  # ← AGREGAR: cada nodo visitado es una lectura
+            stats.inc("disk.reads")
 
             if key == cur.key:
                 return list(cur.vals)
@@ -114,14 +125,15 @@ class AVL(IndexInterface):
     def search(self, key: Any) -> List[Any]:
         stats.inc("index.avl.search")
 
-        with stats.timer("index.avl.search.time"):  # ← CAMBIAR: agregar timer
+        # Búsqueda puntual por clave
+        with stats.timer("index.avl.search.time"):
             return self._search(self.root, key)
 
     def _range(self, node: Optional[_AVLNode], lo: Any, hi: Any, out: List[Any]):
         if not node:
             return
 
-        stats.inc("disk.reads")  # ← AGREGAR: leer nodo actual
+        stats.inc("disk.reads")
 
         if lo < node.key:
             self._range(node.left, lo, hi, out)
@@ -133,7 +145,8 @@ class AVL(IndexInterface):
     def range_search(self, begin_key: Any, end_key: Any) -> List[Any]:
         stats.inc("index.avl.range")
 
-        with stats.timer("index.avl.range.time"):  # ← CAMBIAR: agregar timer
+        # Búsqueda por rango inclusivo [begin_key, end_key]
+        with stats.timer("index.avl.range.time"):
             if begin_key > end_key:
                 begin_key, end_key = end_key, begin_key
             out: List[Any] = []
@@ -144,7 +157,7 @@ class AVL(IndexInterface):
     def _min_node(self, node: _AVLNode) -> _AVLNode:
         cur = node
         while cur.left:
-            stats.inc("disk.reads")  # ← AGREGAR
+            stats.inc("disk.reads")
             cur = cur.left
         return cur
 
@@ -152,15 +165,14 @@ class AVL(IndexInterface):
         if not node:
             return None
 
-        stats.inc("disk.reads")  # ← AGREGAR: leer nodo
+        stats.inc("disk.reads")
 
         if key < node.key:
             node.left = self._remove(node.left, key)
         elif key > node.key:
             node.right = self._remove(node.right, key)
         else:
-            # eliminar todo el key
-            stats.inc("disk.writes")  # ← AGREGAR: eliminar nodo
+            stats.inc("disk.writes")
 
             if not node.left or not node.right:
                 return node.left or node.right
@@ -172,7 +184,6 @@ class AVL(IndexInterface):
         _update(node)
         bal = _balance(node)
 
-        # Rotaciones (ya incrementan disk.writes)
         if bal > 1:
             if _balance(node.left) < 0:
                 node.left = _rotate_left(node.left)
@@ -182,13 +193,14 @@ class AVL(IndexInterface):
                 node.right = _rotate_right(node.right)
             return _rotate_left(node)
 
-        stats.inc("disk.writes")  # ← AGREGAR: actualizar nodo
+        stats.inc("disk.writes")
         return node
 
     def remove(self, key: Any) -> bool:
         stats.inc("index.avl.remove")
 
-        with stats.timer("index.avl.remove.time"):  # ← CAMBIAR: agregar timer
+        # Elimina todas las ocurrencias de la clave
+        with stats.timer("index.avl.remove.time"):
             before = len(self.search(key))
             self.root = self._remove(self.root, key)
 
@@ -204,8 +216,8 @@ class AVL(IndexInterface):
             'height': height(self.root),
         }
 
-    # Persistencia simple JSON
     def save_idx(self, path: str) -> None:
+        """Guarda el índice en un archivo JSON."""
         arr: List[Tuple[Any, List[Any]]] = []
 
         def inorder(n: Optional[_AVLNode]):
@@ -221,13 +233,14 @@ class AVL(IndexInterface):
 
     @classmethod
     def load_idx(cls, path: str) -> 'AVL':
+        """Carga el índice desde un archivo JSON y reconstruye el árbol balanceado."""
         with open(path, 'r', encoding='utf-8') as f:
             blob = json.load(f)
         is_clustered = bool(blob.get('meta', {}).get('clustered', False))
         arr = blob.get('data', [])
         avl = cls(is_clustered=is_clustered)
 
-        # construir balanced desde sorted array
+        # Construye un árbol balanceado desde un arreglo ordenado
         def build(a, lo, hi):
             if lo > hi:
                 return None

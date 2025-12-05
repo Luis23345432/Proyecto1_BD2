@@ -1,12 +1,13 @@
+"""Esquemas Pydantic para validación de datos de la API.
+
+Define modelos para usuarios, bases de datos, tablas, registros,
+operaciones espaciales, consultas SQL y carga de CSV.
+"""
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
-
-# ==========================================
-# AUTENTICACIÓN (NUEVO)
-# ==========================================
 
 class UserCreate(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)
@@ -24,20 +25,12 @@ class Token(BaseModel):
     token_type: str
 
 
-# ==========================================
-# DATABASES
-# ==========================================
-
 class DatabaseCreate(BaseModel):
     name: str = Field(..., min_length=1)
 
 class DatabaseOut(BaseModel):
     name: str
 
-
-# ==========================================
-# TABLES
-# ==========================================
 
 class IndexDecl(BaseModel):
     type: str
@@ -46,7 +39,7 @@ class IndexDecl(BaseModel):
 class TableCreate(BaseModel):
     name: str
     indexes: List[IndexDecl] = []
-    columns: Optional[List[Dict[str, Any]]] = None  # optional detailed schema
+    columns: Optional[List[Dict[str, Any]]] = None
 
 class TableOut(BaseModel):
     name: str
@@ -60,10 +53,6 @@ class TableStatsOut(BaseModel):
     indexes: Dict[str, Any]
 
 
-# ==========================================
-# RECORDS
-# ==========================================
-
 class RecordInsert(BaseModel):
     values: Dict[str, Any]
 
@@ -71,10 +60,6 @@ class RecordsQuery(BaseModel):
     limit: Optional[int] = 100
     offset: Optional[int] = 0
 
-
-# ==========================================
-# SPATIAL QUERIES (RTree)
-# ==========================================
 
 class SpatialRange(BaseModel):
     column: str
@@ -87,17 +72,9 @@ class SpatialKNN(BaseModel):
     k: int
 
 
-# ==========================================
-# SQL
-# ==========================================
-
 class SQLQuery(BaseModel):
     sql: str
 
 
-# ==========================================
-# CSV LOAD
-# ==========================================
-
 class CSVLoad(BaseModel):
-    path: Optional[str] = None  # for local path ingestion (optional)
+    path: Optional[str] = None

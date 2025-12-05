@@ -1,3 +1,8 @@
+"""Endpoints de la API para gestión de tablas.
+
+Permite crear, listar y consultar tablas dentro de bases de datos,
+incluida la configuración de columnas e índices.
+"""
 from __future__ import annotations
 
 import os
@@ -29,6 +34,7 @@ def create_table(
         payload: TableCreate,
         current_user: str = Depends(_verify_user_access)
 ) -> TableOut:
+    """Crea una nueva tabla con el esquema e índices especificados."""
     engine = DatabaseEngine(os.path.dirname(os.path.dirname(__file__)))
     db = engine.get_database(user_id, db_name)
 
@@ -37,7 +43,6 @@ def create_table(
 
     schema = TableSchema(name=payload.name)
 
-    # If frontend provides explicit columns, build from that; else infer from indexes
     if payload.columns:
         for c in payload.columns:
             ctype = c.get("type", "VARCHAR").upper()
@@ -51,7 +56,6 @@ def create_table(
                 primary_key=c.get("primary_key", False),
             ))
 
-    # indexes mapping
     if not payload.indexes and not payload.columns:
         schema.add_column(Column("id", ColumnType.INT, primary_key=True, nullable=False))
         schema.add_index("id", IndexType.BTREE)
@@ -76,9 +80,7 @@ def create_table(
             elif t == "HASH":
                 schema.add_index(idx.column, IndexType.HASH)
             elif t == "RTREE":
-                # si el frontend usa RTREE, asumimos columna ARRAY_FLOAT si no fue declarada
                 if not payload.columns:
-                    # agregar columna como ARRAY_FLOAT si no existe
                     if idx.column not in added_cols:
                         schema.add_column(Column(idx.column, ColumnType.ARRAY_FLOAT, nullable=True))
                         added_cols.add(idx.column)
@@ -98,6 +100,7 @@ def list_tables(
         db_name: str,
         current_user: str = Depends(_verify_user_access)
 ) -> List[TableOut]:
+    """Lista todas las tablas de una base de datos."""
     engine = DatabaseEngine(os.path.dirname(os.path.dirname(__file__)))
     db = engine.get_database(user_id, db_name)
 
@@ -114,6 +117,7 @@ def get_table(
         table_name: str,
         current_user: str = Depends(_verify_user_access)
 ) -> TableOut:
+    """Obtiene información de una tabla específica."""
     engine = DatabaseEngine(os.path.dirname(os.path.dirname(__file__)))
     db = engine.get_database(user_id, db_name)
 
@@ -134,6 +138,7 @@ def get_schema(
         table_name: str,
         current_user: str = Depends(_verify_user_access)
 ) -> TableSchemaOut:
+    """Obtiene el esquema completo de una tabla (columnas e índices)."""
     engine = DatabaseEngine(os.path.dirname(os.path.dirname(__file__)))
     db = engine.get_database(user_id, db_name)
 
@@ -165,6 +170,7 @@ def get_stats(
         table_name: str,
         current_user: str = Depends(_verify_user_access)
 ) -> TableStatsOut:
+    """Obtiene estadísticas de los índices de una tabla."""
     engine = DatabaseEngine(os.path.dirname(os.path.dirname(__file__)))
     db = engine.get_database(user_id, db_name)
 
@@ -185,8 +191,6 @@ def get_stats(
     return TableStatsOut(name=table_name, indexes=idx_stats)
 
 
-# En api/tables.py o donde tengas los endpoints de tablas
-
 @router.get("/{table_name}/indexes/{column_name}/stats")
 async def get_index_stats(
         user_id: str,
@@ -195,6 +199,7 @@ async def get_index_stats(
         column_name: str,
         current_user: str = Depends(get_current_user)
 ):
+    """Obtiene estadísticas detalladas de un índice específico."""
     if user_id != current_user:
         raise HTTPException(status_code=403, detail="Access denied")
 
@@ -212,26 +217,23 @@ async def get_index_stats(
 
     idx = table.indexes[column_name]
 
-    # Obtener stats del índice
     stats = idx.get_stats()
 
     # Info adicional para ISAM
     if hasattr(idx, 'keys') and hasattr(idx, 'pages'):
         from indexes.ISAM import ISAM
         if isinstance(idx, ISAM):
-            stats['index_keys_sample'] = idx.keys[:10]  # Primeras 10 keys
+            stats['index_keys_sample'] = idx.keys[:10]
             stats['page_details'] = []
 
-            for i, page in enumerate(idx.pages[:5]):  # Primeras 5 páginas
+            for i, page in enumerate(idx.pages[:5]):
                 page_info = {
                     'page_index': i,
                     'records_count': len(page.records),
                     'is_full': page.is_full(),
-                    'sample_records': page.records[:3]  # Primeros 3 registros
+                    'sample_records': page.records[:3]
                 }
                 stats['page_details'].append(page_info)
-
-            # Info de overflow
             stats['overflow_details'] = {}
             for page_idx, overflow_head in list(idx.overflow_chains.items())[:3]:
                 chain_length = 0

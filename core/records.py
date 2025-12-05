@@ -1,3 +1,9 @@
+"""
+Registro tipado según el `TableSchema`.
+
+Se encarga de convertir y validar los valores de columnas
+de acuerdo al tipo y restricciones (longitud, NULL, PK).
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -16,6 +22,7 @@ class Record:
         self.values = self._coerce(self.values)
 
     def _coerce(self, values: Dict[str, Any]) -> Dict[str, Any]:
+        """Normaliza y convierte los valores según el esquema de la tabla."""
         out: Dict[str, Any] = {}
         for col in self.schema.columns:
             name = col.name
@@ -25,14 +32,7 @@ class Record:
                 out[name] = None
                 continue
             v = values[name]
-
-            # ← AGREGAR ESTOS PRINTS
-            print(f"DEBUG _coerce columna={name}, col_type={col.col_type}, value={v}, tipo={type(v)}")
-
             result = convert_value(col.col_type, v, max_len=col.length)
-
-            print(f"DEBUG _coerce después convert_value: result={result}, tipo={type(result)}")
-
             out[name] = result
         return out
 

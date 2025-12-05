@@ -1,3 +1,7 @@
+/**
+ * Selector de bases de datos con dropdown.
+ * Carga y muestra las bases de datos del usuario, permitiendo seleccionar una activa.
+ */
 "use client"
 
 import { useState, useEffect } from "react"

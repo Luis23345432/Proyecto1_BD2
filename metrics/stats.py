@@ -1,3 +1,8 @@
+"""Módulo de gestión de métricas de rendimiento.
+
+Proporciona contadores y temporizadores para medir operaciones de índices,
+tablas y accesos a disco, con capacidad de reportar estadísticas agregadas.
+"""
 from __future__ import annotations
 
 import time
@@ -6,6 +11,11 @@ from contextlib import contextmanager
 
 
 class StatsManager:
+    """Gestor centralizado de estadísticas de rendimiento.
+    
+    Mantiene contadores acumulativos y temporizadores para diferentes operaciones,
+    permitiendo análisis de rendimiento granular.
+    """
     def __init__(self):
         self.counters: Dict[str, int] = {}
         self.timers: Dict[str, float] = {}  # Acumulado en segundos
@@ -13,27 +23,23 @@ class StatsManager:
         self._active_timers: Dict[str, float] = {}  # Timers activos (para contexto)
 
     def reset(self):
+        """Reinicia todos los contadores y temporizadores."""
         self.counters.clear()
         self.timers.clear()
         self.timer_calls.clear()
         self._active_timers.clear()
 
-    # ========================================
-    # CONTADORES
-    # ========================================
-
     def inc(self, key: str, amount: int = 1):
+        """Incrementa un contador por la cantidad especificada."""
         self.counters[key] = self.counters.get(key, 0) + amount
 
     def get_counter(self, key: str) -> int:
+        """Obtiene el valor actual de un contador."""
         return self.counters.get(key, 0)
-
-    # ========================================
-    # TIMERS
-    # ========================================
 
     @contextmanager
     def timer(self, key: str):
+        """Context manager para medir tiempo de ejecución de un bloque de código."""
         start = time.perf_counter()
         try:
             yield
@@ -43,23 +49,23 @@ class StatsManager:
             self.timer_calls[key] = self.timer_calls.get(key, 0) + 1
 
     def get_time(self, key: str) -> float:
+        """Obtiene el tiempo total acumulado en segundos."""
         return self.timers.get(key, 0.0)
 
     def get_time_ms(self, key: str) -> float:
+        """Obtiene el tiempo total acumulado en milisegundos."""
         return self.timers.get(key, 0.0) * 1000
 
     def get_avg_time_ms(self, key: str) -> float:
+        """Obtiene el tiempo promedio por llamada en milisegundos."""
         total_time = self.timers.get(key, 0.0)
         calls = self.timer_calls.get(key, 0)
         if calls == 0:
             return 0.0
         return (total_time / calls) * 1000
 
-    # ========================================
-    # REPORTES
-    # ========================================
-
     def get_stats(self) -> Dict[str, Any]:
+        """Retorna un diccionario con todas las estadísticas acumuladas."""
         return {
             "counters": dict(self.counters),
             "timers": {
@@ -73,6 +79,7 @@ class StatsManager:
         }
 
     def get_index_stats(self, index_name: str) -> Dict[str, Any]:
+        """Retorna estadísticas detalladas para un índice específico."""
         prefix = f"{index_name}."
 
         return {
@@ -106,6 +113,7 @@ class StatsManager:
         }
 
     def print_summary(self):
+        """Imprime un resumen formateado de todas las métricas acumuladas."""
         print("\n" + "=" * 60)
         print("PERFORMANCE METRICS SUMMARY")
         print("=" * 60)
@@ -129,5 +137,4 @@ class StatsManager:
         print("=" * 60 + "\n")
 
 
-# Instancia global
 stats = StatsManager()

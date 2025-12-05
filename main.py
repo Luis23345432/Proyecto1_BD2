@@ -1,3 +1,7 @@
+"""
+Sistema de gestión de archivos y metadatos para usuarios, bases de datos y tablas.
+Crea la estructura de directorios y archivos JSON necesarios para el proyecto BD2.
+"""
 import os
 import re
 import sys
@@ -7,10 +11,12 @@ from datetime import datetime, timezone
 
 
 def _now_iso() -> str:
+    """Retorna el timestamp actual en formato ISO 8601."""
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
 def _validate_name(name: object, field: str) -> str:
+    """Valida que el nombre contenga solo caracteres alfanuméricos, puntos, guiones y guiones bajos."""
     s = str(name)
     if not s:
         raise ValueError(f"{field} no puede estar vacío")
@@ -20,6 +26,7 @@ def _validate_name(name: object, field: str) -> str:
 
 
 def _ensure_base(base_dir: Optional[str]) -> str:
+    """Asegura que exista un directorio base; si no se proporciona, usa data/users por defecto."""
     if base_dir is None:
         script_dir = os.path.dirname(os.path.abspath(__file__))
         base_dir = os.path.join(script_dir, "data", "users")
@@ -27,6 +34,7 @@ def _ensure_base(base_dir: Optional[str]) -> str:
 
 
 def _write_json(path: str, obj: Any) -> None:
+    """Escribe un objeto como JSON de forma atómica usando un archivo temporal."""
     dirpath = os.path.dirname(path)
     os.makedirs(dirpath, exist_ok=True)
     temp = path + ".tmp"
@@ -36,6 +44,7 @@ def _write_json(path: str, obj: Any) -> None:
 
 
 def create_databases_for_user(user_id: object, base_dir: Optional[str] = None) -> str:
+    """Crea el directorio databases para un usuario específico."""
     uid = _validate_name(user_id, "user_id")
     base_dir = _ensure_base(base_dir)
     target = os.path.join(base_dir, uid, "databases")
@@ -44,6 +53,7 @@ def create_databases_for_user(user_id: object, base_dir: Optional[str] = None) -
 
 
 def create_user(user_id: object, base_dir: Optional[str] = None) -> str:
+    """Crea la estructura de directorios para un usuario y su archivo de metadatos."""
     uid = _validate_name(user_id, "user_id")
     base_dir = _ensure_base(base_dir)
     user_dir = os.path.join(base_dir, uid)
@@ -62,6 +72,7 @@ def create_user(user_id: object, base_dir: Optional[str] = None) -> str:
 
 
 def create_database(user_id: object, db_name: object, base_dir: Optional[str] = None) -> str:
+    """Crea una base de datos para un usuario, incluyendo su directorio y archivo metadata.json."""
     uid = _validate_name(user_id, "user_id")
     db = _validate_name(db_name, "db_name")
     base_dir = _ensure_base(base_dir)
@@ -80,7 +91,6 @@ def create_database(user_id: object, db_name: object, base_dir: Optional[str] = 
         }
         _write_json(meta_path, meta)
 
-    # actualizar user_metadata.json para listar la db si falta
     user_meta = os.path.join(base_dir, uid, "user_metadata.json")
     if os.path.exists(user_meta):
         try:
@@ -96,6 +106,14 @@ def create_database(user_id: object, db_name: object, base_dir: Optional[str] = 
 
 
 def create_table(user_id: object, db_name: object, table_name: object, base_dir: Optional[str] = None) -> str:
+    """
+    Crea una tabla dentro de una base de datos, generando:
+    - Directorio de la tabla
+    - Archivo data.dat (heap file)
+    - schema.json (estructura de columnas)
+    - stats.json (estadísticas de filas y páginas)
+    - Directorio de índices
+    """
     uid = _validate_name(user_id, "user_id")
     db = _validate_name(db_name, "db_name")
     table = _validate_name(table_name, "table_name")
@@ -105,13 +123,11 @@ def create_table(user_id: object, db_name: object, table_name: object, base_dir:
     table_dir = os.path.join(tables_dir, table)
     os.makedirs(table_dir, exist_ok=True)
 
-    # data file (heap file placeholder)
     data_path = os.path.join(table_dir, "data.dat")
     if not os.path.exists(data_path):
         with open(data_path, "ab"):
             pass
 
-    # schema.json (estructura básica)
     schema_path = os.path.join(table_dir, "schema.json")
     if not os.path.exists(schema_path):
         schema = {
@@ -122,11 +138,9 @@ def create_table(user_id: object, db_name: object, table_name: object, base_dir:
         }
         _write_json(schema_path, schema)
 
-    # indexes directory
     indexes_dir = os.path.join(table_dir, "indexes")
     os.makedirs(indexes_dir, exist_ok=True)
 
-    # stats.json
     stats_path = os.path.join(table_dir, "stats.json")
     if not os.path.exists(stats_path):
         stats = {
@@ -137,7 +151,6 @@ def create_table(user_id: object, db_name: object, table_name: object, base_dir:
         }
         _write_json(stats_path, stats)
 
-    # actualizar metadata de la db para registrar la tabla
     db_meta_path = os.path.join(base_dir, uid, "databases", db, "metadata.json")
     if os.path.exists(db_meta_path):
         try:
@@ -156,10 +169,13 @@ def create_table(user_id: object, db_name: object, table_name: object, base_dir:
 
 
 if __name__ == "__main__":
-    # CLI de prueba para el Paso 1 (sistema de archivos + JSONs):
-    #   python main.py user                     -> crea user y su carpeta databases
-    #   python main.py user db                  -> crea la base de datos (metadata.json)
-    #   python main.py user db table            -> crea la tabla (data.dat, schema.json, stats.json)
+    """
+    CLI para crear usuarios, bases de datos y tablas:
+    - python main.py                    -> crea usuario demo
+    - python main.py user               -> crea usuario y carpeta databases
+    - python main.py user db            -> crea base de datos
+    - python main.py user db table      -> crea tabla completa
+    """
     args = sys.argv[1:]
 
     try:

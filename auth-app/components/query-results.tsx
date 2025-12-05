@@ -1,3 +1,7 @@
+/**
+ * Componente para mostrar resultados de consultas SQL.
+ * Incluye tabla de resultados, métricas de rendimiento y detalles de operaciones de índices.
+ */
 "use client"
 
 import { useState } from "react"

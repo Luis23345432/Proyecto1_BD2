@@ -1,3 +1,10 @@
+"""Módulo para la extracción de características de imágenes.
+
+Implementa la extracción de descriptores SIFT (Scale-Invariant Feature Transform)
+desde imágenes utilizando OpenCV. Los descriptores SIFT son invariantes a escala
+y rotación, ideales para tareas de recuperación de imágenes por contenido.
+"""
+
 import logging
 from typing import List, Tuple
 
@@ -9,9 +16,18 @@ logger = logging.getLogger(__name__)
 
 
 def extract_sift_descriptors(image_path: str, max_keypoints: int = 2000) -> np.ndarray:
-    """Extract SIFT descriptors (128-d) from an image path.
-
-    Returns an array of shape (n_keypoints, 128) or empty array if none.
+    """Extrae descriptores SIFT de una imagen.
+    
+    Detecta puntos clave usando SIFT, selecciona los más relevantes según
+    su respuesta, y aplica normalización RootSIFT para mejorar el rendimiento.
+    
+    Args:
+        image_path: Ruta a la imagen
+        max_keypoints: Número máximo de puntos clave a retener
+        
+    Returns:
+        Matriz de descriptores SIFT normalizados (n_keypoints, 128).
+        Retorna matriz vacía si ocurre un error o no se detectan puntos.
     """
     img = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
     if img is None:
@@ -28,14 +44,13 @@ def extract_sift_descriptors(image_path: str, max_keypoints: int = 2000) -> np.n
     if not keypoints:
         return np.empty((0, 128), dtype=np.float32)
 
-    # Keep strongest keypoints
+
     keypoints = sorted(keypoints, key=lambda k: -k.response)[:max_keypoints]
     keypoints, descriptors = sift.compute(img, keypoints)
     if descriptors is None:
         return np.empty((0, 128), dtype=np.float32)
     d = descriptors.astype(np.float32)
-    # RootSIFT: L1 normalize each descriptor then take element-wise sqrt
-    # Avoid division by zero by adding small epsilon
+
     eps = 1e-12
     l1 = np.maximum(np.sum(np.abs(d), axis=1, keepdims=True), eps)
     d = d / l1
@@ -44,6 +59,15 @@ def extract_sift_descriptors(image_path: str, max_keypoints: int = 2000) -> np.n
 
 
 def batch_extract_sift(paths: List[str], max_keypoints: int = 2000) -> Tuple[List[str], List[np.ndarray]]:
+    """Extrae descriptores SIFT de múltiples imágenes.
+    
+    Args:
+        paths: Lista de rutas a imágenes
+        max_keypoints: Número máximo de puntos clave por imagen
+        
+    Returns:
+        Tupla (ids, descriptores) con las rutas válidas y sus descriptores
+    """
     ids = []
     descs = []
     for p in paths:

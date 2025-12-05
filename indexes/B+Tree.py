@@ -1,3 +1,10 @@
+"""
+Índice B+Tree con soporte de búsqueda, rango, inserción y borrado.
+
+Incluye rebalanceo por split/merge, enlaces entre hojas para
+recorridos por rango y persistencia opcional en JSON.
+Registra métricas de lecturas/escrituras y tiempos por operación.
+"""
 import math
 import json
 from typing import Any, List, Optional, Tuple, Dict
@@ -5,7 +12,7 @@ from abc import ABC, abstractmethod
 from metrics import stats
 
 
-# INTERFACES ABSTRACTAS
+# Interfaces abstractas
 
 class IndexInterface(ABC):
 
@@ -30,7 +37,7 @@ class IndexInterface(ABC):
         pass
 
 
-#ÍNDICE B+ TREE
+# Índice B+Tree
 
 class IndexEntry:
 
@@ -92,13 +99,13 @@ class BPlusTree(IndexInterface):
         if self.verbose:
             print(f"B+ Tree {'CLUSTERED' if is_clustered else 'UNCLUSTERED'} creado (grado={degree})")
 
-    #OPERACIONES PRINCIPALES
+    # Operaciones principales
 
     def search(self, key: Any) -> List[Any]:
         stats.inc("index.btree.search")
-        stats.inc("disk.reads")  # ← AGREGAR: Simular lectura de nodo raíz
+        stats.inc("disk.reads")
 
-        with stats.timer("index.btree.search.time"):  # ← CAMBIAR: usar .time
+        with stats.timer("index.btree.search.time"):
             self.search_count += 1
 
             if self.verbose:
@@ -119,9 +126,9 @@ class BPlusTree(IndexInterface):
 
     def range_search(self, begin_key: Any, end_key: Any) -> List[Any]:
         stats.inc("index.btree.range")
-        stats.inc("disk.reads")  # ← AGREGAR
+        stats.inc("disk.reads")
 
-        with stats.timer("index.btree.range.time"):  # ← CAMBIAR
+        with stats.timer("index.btree.range.time"):
             self.search_count += 1
 
             if self.verbose:
@@ -129,11 +136,11 @@ class BPlusTree(IndexInterface):
 
             leaf = self._find_leaf(self.root, begin_key)
             results = []
-            pages_read = 0  # ← AGREGAR: contador de páginas leídas
+            pages_read = 0
 
             while leaf:
                 pages_read += 1
-                stats.inc("disk.reads")  # ← AGREGAR: Una lectura por cada hoja
+                stats.inc("disk.reads")
 
                 for i, key in enumerate(leaf.keys):
                     if begin_key <= key <= end_key:
@@ -152,10 +159,10 @@ class BPlusTree(IndexInterface):
 
     def add(self, key: Any, value: Any) -> bool:
         stats.inc("index.btree.add")
-        stats.inc("disk.reads")  # ← AGREGAR: Leer para buscar posición
-        stats.inc("disk.writes")  # ← AGREGAR: Escribir nuevo dato
+        stats.inc("disk.reads")
+        stats.inc("disk.writes")
 
-        with stats.timer("index.btree.add.time"):  # ← CAMBIAR
+        with stats.timer("index.btree.add.time"):
             self.insert_count += 1
 
             if self.verbose:
@@ -174,17 +181,17 @@ class BPlusTree(IndexInterface):
                 self.root.children.append(old_root)
                 old_root.parent = self.root
                 self._split_child(self.root, 0)
-                stats.inc("disk.writes")  # ← AGREGAR: Split implica escritura extra
+                stats.inc("disk.writes")
 
             self._insert_non_full(self.root, IndexEntry(key, [value]))
             return True
 
     def remove(self, key: Any) -> bool:
         stats.inc("index.btree.remove")
-        stats.inc("disk.reads")  # ← AGREGAR: Leer para encontrar
-        stats.inc("disk.writes")  # ← AGREGAR: Escribir cambios
+        stats.inc("disk.reads")
+        stats.inc("disk.writes")
 
-        with stats.timer("index.btree.remove.time"):  # ← CAMBIAR
+        with stats.timer("index.btree.remove.time"):
             self.delete_count += 1
 
             if self.verbose:
@@ -215,7 +222,7 @@ class BPlusTree(IndexInterface):
             'tree_height': self._get_height(self.root),
         }
 
-    #MÉTODOS AUXILIARES
+    # Métodos auxiliares
 
     def _find_entry(self, node: BPlusNode, key: Any) -> Optional[IndexEntry]:
         if node.is_leaf:
@@ -414,7 +421,7 @@ class BPlusTree(IndexInterface):
             return 1
         return 1 + self._get_height(node.children[0])
 
-    #UTILIDADES
+    # Utilidades
 
     def print_tree(self, node: Optional[BPlusNode] = None, level: int = 0):
         if node is None:
@@ -438,9 +445,9 @@ class BPlusTree(IndexInterface):
                 print(f"{key}: {value}")
         print("=" * 60)
 
-
     # Persistencia .idx (opcional)
     def save_idx(self, path: str) -> None:
+        """Guarda la estructura del B+Tree en JSON para reconstrucción futura."""
         def node_to_dict(node: BPlusNode) -> Dict[str, Any]:
             if node.is_leaf:
                 vals_list = [child.vals for child in node.children]
@@ -460,6 +467,7 @@ class BPlusTree(IndexInterface):
 
     @classmethod
     def load_idx(cls, path: str, verbose: bool = False) -> "BPlusTree":
+        """Carga la estructura JSON y reconstruye el B+Tree, enlazando hojas."""
         with open(path, "r", encoding="utf-8") as f:
             blob = json.load(f)
         meta = blob.get("meta", {})

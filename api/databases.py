@@ -1,3 +1,7 @@
+"""
+Endpoints para gestión de bases de datos de usuario.
+Permite crear, listar, obtener y eliminar bases de datos con verificación de permisos.
+"""
 from __future__ import annotations
 
 import os
@@ -12,6 +16,7 @@ router = APIRouter(prefix="/users/{user_id}/databases", tags=["databases"])
 
 
 def _verify_user_access(user_id: str, current_user: str = Depends(get_current_user)):
+    """Verifica que el usuario autenticado tenga acceso a los recursos del user_id solicitado."""
     if user_id != current_user:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -26,6 +31,7 @@ def create_database(
         payload: DatabaseCreate,
         current_user: str = Depends(_verify_user_access)
 ) -> DatabaseOut:
+    """Crea una nueva base de datos para el usuario."""
     engine = DatabaseEngine(os.path.dirname(os.path.dirname(__file__)))
     db = engine.create_database(user_id, payload.name)
     return DatabaseOut(name=db.name)
@@ -36,6 +42,7 @@ def list_databases(
         user_id: str,
         current_user: str = Depends(_verify_user_access)
 ) -> List[DatabaseOut]:
+    """Lista todas las bases de datos del usuario."""
     engine = DatabaseEngine(os.path.dirname(os.path.dirname(__file__)))
     user_dir = os.path.join(engine.root_dir, "data", "users", user_id, "databases")
 
@@ -55,6 +62,7 @@ def get_database(
         db_name: str,
         current_user: str = Depends(_verify_user_access)
 ) -> DatabaseOut:
+    """Obtiene información de una base de datos específica."""
     engine = DatabaseEngine(os.path.dirname(os.path.dirname(__file__)))
     db = engine.get_database(user_id, db_name)
 
@@ -70,6 +78,7 @@ def delete_database(
         db_name: str,
         current_user: str = Depends(_verify_user_access)
 ):
+    """Elimina permanentemente una base de datos y todos sus archivos."""
     engine = DatabaseEngine(os.path.dirname(os.path.dirname(__file__)))
     db_dir = os.path.join(engine.root_dir, "data", "users", user_id, "databases", db_name)
 

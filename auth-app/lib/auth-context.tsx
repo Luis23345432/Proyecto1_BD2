@@ -1,3 +1,7 @@
+/**
+ * Contexto de autenticación React para gestionar el estado del usuario.
+ * Proporciona funciones de login/logout y persiste el estado en localStorage.
+ */
 "use client"
 
 import type React from "react"
@@ -21,7 +25,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [userId, setUserId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  // Load auth data from localStorage on mount
+  // Cargar datos de autenticación desde localStorage al montar
   useEffect(() => {
     const storedUsername = localStorage.getItem("username")
     const storedToken = localStorage.getItem("token")
@@ -71,6 +75,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   )
 }
 
+/** Hook personalizado para acceder al contexto de autenticación */
 export function useAuth() {
   const context = useContext(AuthContext)
   if (context === undefined) {

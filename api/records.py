@@ -1,3 +1,8 @@
+"""Endpoints de la API para gestión de registros.
+
+Permite insertar, listar y buscar registros en tablas,
+incluidas búsquedas espaciales con RTree.
+"""
 from __future__ import annotations
 
 import os
@@ -8,7 +13,7 @@ from fastapi import APIRouter, HTTPException, Query, Depends
 from .schemas import RecordInsert, SpatialRange, SpatialKNN
 from .auth import get_current_user
 from engine import DatabaseEngine
-from metrics import stats  # ← IMPORTANTE
+from metrics import stats
 
 router = APIRouter(prefix="/users/{user_id}/databases/{db_name}/tables/{table_name}/records", tags=["records"])
 
@@ -30,6 +35,7 @@ def insert_record(
         payload: RecordInsert,
         current_user: str = Depends(_verify_user_access)
 ):
+    """Inserta un nuevo registro en la tabla."""
     start_time = time.perf_counter()
     stats.reset()
 
@@ -41,25 +47,15 @@ def insert_record(
     if t is None:
         raise HTTPException(status_code=404, detail="Table not found")
 
-    print("🔍 A. Antes de insert")
     rid = t.insert(payload.values)
-    print(f"🔍 B. Después de insert, rid={rid}")
-
-    # Recuperar el registro recién insertado
-    print("🔍 C. Antes de fetch_by_rid")
     inserted_record = t.fetch_by_rid(rid)
-    print(f"🔍 D. Record obtenido: {inserted_record}")
 
     execution_time_ms = (time.perf_counter() - start_time) * 1000
-    print(f"🔍 E. Execution time: {execution_time_ms}")
 
-    # ← AGREGAR ESTOS PRINTS CRÍTICOS
-    print(f"🔍 F. stats.counters = {stats.counters}")
-    print(f"🔍 G. stats.timers = {list(stats.timers.keys())}")
+    print(f"🔍 stats.counters = {stats.counters}")
+    print(f"🔍 stats.timers = {list(stats.timers.keys())}")
 
-    print("🔍 H. Antes de get_query_stats")
     index_metrics = t.get_query_stats()
-    print(f"🔍 I. index_metrics = {index_metrics}")
 
     response = {
         "ok": True,
@@ -74,7 +70,6 @@ def insert_record(
         }
     }
 
-    print(f"🔍 J. Response completa = {response}")
     return response
 
 
@@ -87,6 +82,7 @@ def list_records(
         offset: int = Query(0, ge=0),
         current_user: str = Depends(_verify_user_access)
 ):
+    """Lista registros de una tabla con paginación."""
     start_time = time.perf_counter()
     stats.reset()
 
@@ -98,11 +94,10 @@ def list_records(
     if t is None:
         raise HTTPException(status_code=404, detail="Table not found")
 
-    # full scan (simple)
     out: List[Dict[str, Any]] = []
     pc = t.datafile.page_count()
     for pid in range(pc):
-        stats.inc("disk.reads")  # ← Contar cada lectura de página
+        stats.inc("disk.reads")
         page = t.datafile.read_page(pid)
         out.extend(page.iter_records())
 
@@ -114,7 +109,7 @@ def list_records(
         "execution_time_ms": round(execution_time_ms, 2),
         "metrics": {
             "page_scans": pc,
-            "disk_reads": pc  # Full scan = leer todas las páginas
+            "disk_reads": pc
         }
     }
 
@@ -128,6 +123,7 @@ def search_by_column(
         key: str = Query(..., description="Valor a buscar"),
         current_user: str = Depends(_verify_user_access)
 ):
+    """Búsqueda exacta por columna usando índices disponibles."""
     start_time = time.perf_counter()
     stats.reset()
 
@@ -148,9 +144,9 @@ def search_by_column(
         "count": len(rows),
         "execution_time_ms": round(execution_time_ms, 2),
         "metrics": {
-            "total_disk_accesses": stats.get_counter("disk.reads") + stats.get_counter("disk.writes"),  # ← CAMBIAR
-            "disk_reads": stats.get_counter("disk.reads"),  # ← CAMBIAR
-            "disk_writes": stats.get_counter("disk.writes"),  # ← CAMBIAR
+            "total_disk_accesses": stats.get_counter("disk.reads") + stats.get_counter("disk.writes"),
+            "disk_reads": stats.get_counter("disk.reads"),
+            "disk_writes": stats.get_counter("disk.writes"),
             "indexes": index_metrics
         }
     }
@@ -166,6 +162,7 @@ def range_search(
         end_key: str = Query(...),
         current_user: str = Depends(_verify_user_access)
 ):
+    """Búsqueda por rango de valores en una columna."""
     start_time = time.perf_counter()
     stats.reset()
 
@@ -186,9 +183,9 @@ def range_search(
         "count": len(rows),
         "execution_time_ms": round(execution_time_ms, 2),
         "metrics": {
-            "total_disk_accesses": stats.get_counter("disk.reads") + stats.get_counter("disk.writes"),  # ← CAMBIAR
-            "disk_reads": stats.get_counter("disk.reads"),  # ← CAMBIAR
-            "disk_writes": stats.get_counter("disk.writes"),  # ← CAMBIAR
+            "total_disk_accesses": stats.get_counter("disk.reads") + stats.get_counter("disk.writes"),
+            "disk_reads": stats.get_counter("disk.reads"),
+            "disk_writes": stats.get_counter("disk.writes"),
             "indexes": index_metrics
         }
     }
@@ -202,6 +199,7 @@ def spatial_range(
         payload: SpatialRange,
         current_user: str = Depends(_verify_user_access)
 ):
+    """Búsqueda espacial por radio usando RTree."""
     start_time = time.perf_counter()
     stats.reset()
 
@@ -222,9 +220,9 @@ def spatial_range(
         "count": len(rows),
         "execution_time_ms": round(execution_time_ms, 2),
         "metrics": {
-            "total_disk_accesses": stats.get_counter("disk.reads") + stats.get_counter("disk.writes"),  # ← CAMBIAR
-            "disk_reads": stats.get_counter("disk.reads"),  # ← CAMBIAR
-            "disk_writes": stats.get_counter("disk.writes"),  # ← CAMBIAR
+            "total_disk_accesses": stats.get_counter("disk.reads") + stats.get_counter("disk.writes"),
+            "disk_reads": stats.get_counter("disk.reads"),
+            "disk_writes": stats.get_counter("disk.writes"),
             "indexes": index_metrics
         }
     }
@@ -238,6 +236,7 @@ def spatial_knn(
         payload: SpatialKNN,
         current_user: str = Depends(_verify_user_access)
 ):
+    """Búsqueda de k-vecinos más cercanos usando RTree."""
     start_time = time.perf_counter()
     stats.reset()
 
@@ -258,9 +257,9 @@ def spatial_knn(
         "count": len(rows),
         "execution_time_ms": round(execution_time_ms, 2),
         "metrics": {
-            "total_disk_accesses": stats.get_counter("disk.reads") + stats.get_counter("disk.writes"),  # ← CAMBIAR
-            "disk_reads": stats.get_counter("disk.reads"),  # ← CAMBIAR
-            "disk_writes": stats.get_counter("disk.writes"),  # ← CAMBIAR
+            "total_disk_accesses": stats.get_counter("disk.reads") + stats.get_counter("disk.writes"),
+            "disk_reads": stats.get_counter("disk.reads"),
+            "disk_writes": stats.get_counter("disk.writes"),
             "indexes": index_metrics
         }
     }

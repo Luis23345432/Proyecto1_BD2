@@ -1,3 +1,8 @@
+"""Adaptador para importar BPlusTree e IndexInterface desde B+Tree.py.
+
+Este módulo proporciona una interfaz limpia para importar las clases
+principales del árbol B+ sin exponer los detalles de implementación.
+"""
 import importlib.util
 import os
 from typing import Any

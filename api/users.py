@@ -1,3 +1,10 @@
+"""
+Gestión de usuarios: registro, login y consulta básica.
+
+Provee endpoints públicos para crear usuarios y autenticarse,
+y protegidos para obtener el usuario actual. Persistencia simple
+en `data/users.json` y estructura de carpetas por usuario.
+"""
 from __future__ import annotations
 
 import os
@@ -18,10 +25,7 @@ from engine import DatabaseEngine
 
 router = APIRouter(prefix="/users", tags=["users"])
 
-
-# ========================================
-# FUNCIONES AUXILIARES
-# ========================================
+# Funciones auxiliares de persistencia
 
 def _users_root(engine: DatabaseEngine) -> str:
     return os.path.join(engine.root_dir, "data", "users")
@@ -45,24 +49,19 @@ def _save_users_db(engine: DatabaseEngine, users_db: Dict):
     with open(path, 'w', encoding='utf-8') as f:
         json.dump(users_db, f, indent=2, ensure_ascii=False)
 
-
-# ========================================
-# ENDPOINTS PÚBLICOS (sin autenticación)
-# ========================================
+# Endpoints públicos (sin autenticación)
 
 @router.post("/register", response_model=User, status_code=201)
 def register(payload: UserCreate) -> User:
     engine = DatabaseEngine(os.path.dirname(os.path.dirname(__file__)))
     users_db = _load_users_db(engine)
 
-    # Verificar si el username ya existe
     if payload.username in users_db:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Username already exists"
         )
 
-    # Hashear contraseña y guardar usuario
     hashed_password = get_password_hash(payload.password)
     users_db[payload.username] = {
         "username": payload.username,
@@ -70,11 +69,9 @@ def register(payload: UserCreate) -> User:
     }
     _save_users_db(engine, users_db)
 
-    # Crear estructura de directorios para el usuario
     user_dir = os.path.join(_users_root(engine), payload.username)
     os.makedirs(os.path.join(user_dir, "databases"), exist_ok=True)
 
-    # Crear base de datos por defecto
     default_db_dir = os.path.join(user_dir, "databases", "default")
     os.makedirs(default_db_dir, exist_ok=True)
 
@@ -86,7 +83,6 @@ def login(payload: UserLogin) -> Token:
     engine = DatabaseEngine(os.path.dirname(os.path.dirname(__file__)))
     users_db = _load_users_db(engine)
 
-    # Verificar si el usuario existe
     user_data = users_db.get(payload.username)
     if not user_data:
         raise HTTPException(
@@ -94,14 +90,12 @@ def login(payload: UserLogin) -> Token:
             detail="Incorrect username or password",
         )
 
-    # Verificar contraseña
     if not verify_password(payload.password, user_data['hashed_password']):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
         )
 
-    # Crear token JWT
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": payload.username},
@@ -110,19 +104,13 @@ def login(payload: UserLogin) -> Token:
 
     return Token(access_token=access_token, token_type="bearer")
 
-
-# ========================================
-# ENDPOINTS PROTEGIDOS (requieren token)
-# ========================================
+# Endpoints protegidos (requieren token)
 
 @router.get("/me", response_model=User)
 def get_me(current_user: str = Depends(get_current_user)) -> User:
     return User(username=current_user)
 
-
-# ========================================
-# ENDPOINTS DE ADMINISTRACIÓN (públicos por ahora)
-# ========================================
+# Endpoints de administración (públicos)
 
 @router.get("", response_model=List[User])
 def list_users() -> List[User]:

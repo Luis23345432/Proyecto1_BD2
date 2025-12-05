@@ -1,3 +1,13 @@
+"""Parser SQL para convertir sentencias en estructuras AST.
+
+Implementa parsing descendente recursivo para:
+- CREATE TABLE con columnas DDL e índices.
+- SELECT con condiciones, espaciales y límites.
+- INSERT con columnas explícitas o posicionales.
+- DELETE con condiciones WHERE.
+
+El parser consume tokens del tokenizador y construye nodos AST.
+"""
 from __future__ import annotations
 
 from typing import List, Optional, Tuple, Dict, Any
@@ -8,6 +18,10 @@ from .ast import (
 
 
 class SQLParser:
+    """Parser SQL que convierte tokens en estructuras AST.
+    
+    Implementa métodos de parsing para cada tipo de sentencia SQL.
+    """
     def __init__(self, sql: str):
         self.tokens: List[Token] = SQLTokenizer(sql).tokenize()
         self.i = 0
@@ -27,6 +41,7 @@ class SQLParser:
         return t
 
     def parse(self):
+        """Parsea la sentencia SQL y retorna el nodo AST correspondiente."""
         t = self._peek()
         if not t:
             raise ValueError("Empty SQL")
@@ -41,6 +56,7 @@ class SQLParser:
         raise ValueError(f"Unsupported SQL starting with {t.value}")
 
     def _parse_create_table(self) -> CreateTableStmt:
+        """Parsea una sentencia CREATE TABLE."""
         self._eat('KW', 'CREATE')
         self._eat('KW', 'TABLE')
         name = self._eat('IDENT').value
@@ -135,6 +151,7 @@ class SQLParser:
         return CreateTableStmt(name=name, csv_path=csv_path, indexes=indexes, columns=columns)
 
     def _parse_select(self) -> SelectStmt:
+        """Parsea una sentencia SELECT con soporte para WHERE espacial y LIMIT."""
         self._eat('KW', 'SELECT')
         cols: List[str] = []
         t = self._peek()
@@ -204,39 +221,29 @@ class SQLParser:
         return SelectStmt(table=table, columns=cols, condition=condition, spatial=spatial, limit=limit_val)
 
     def _parse_insert(self) -> InsertStmt:
+        """Parsea una sentencia INSERT con soporte para columnas explícitas."""
         self._eat('KW', 'INSERT')
         self._eat('KW', 'INTO')
         table = self._eat('IDENT').value
 
-        # ← NUEVO: Verificar si hay lista de columnas explícitas
         columns = None
         t = self._peek()
 
         if t and t.type == 'PUNC' and t.value == '(':
-            # Guardar posición actual
             saved_pos = self.i
             self._eat('PUNC', '(')
 
-            # Mirar el siguiente token
             next_t = self._peek()
 
-            # Si es IDENT, son columnas explícitas
             if next_t and next_t.type == 'IDENT':
-                # Verificar si después del IDENT viene ',' o ')'
-                # Esto nos ayuda a distinguir entre:
-                # INSERT INTO t (col1, col2) VALUES (...)
-                # vs
-                # INSERT INTO t VALUES (val1, val2)
                 temp_pos = self.i
-                self._eat('IDENT')  # Consumir el identificador
+                self._eat('IDENT')
                 lookahead = self._peek()
-                self.i = temp_pos  # Restaurar posición
+                self.i = temp_pos
 
-                # Si viene ',' o ')', son columnas
                 if lookahead and lookahead.type == 'PUNC' and lookahead.value in (',', ')'):
                     columns = []
 
-                    # Leer nombres de columnas
                     columns.append(self._eat('IDENT').value)
 
                     while True:
@@ -249,13 +256,10 @@ class SQLParser:
 
                     self._eat('PUNC', ')')
                 else:
-                    # No son columnas, restaurar y continuar
                     self.i = saved_pos
             else:
-                # No es IDENT, restaurar posición
                 self.i = saved_pos
 
-        # Ahora debe venir VALUES
         self._eat('KW', 'VALUES')
         self._eat('PUNC', '(')
 
@@ -272,20 +276,18 @@ class SQLParser:
 
         self._eat('PUNC', ')')
 
-        # ← NUEVO: Validar que coincidan columnas y valores
         if columns and len(columns) != len(positional_values):
             raise ValueError(f"Column count ({len(columns)}) doesn't match value count ({len(positional_values)})")
 
-        # Store as positional for executor to map to column names
         values = {"__positional__": positional_values}
 
-        # ← NUEVO: Agregar columnas explícitas si existen
         if columns:
             values["__columns__"] = columns
 
         return InsertStmt(table=table, values=values)
 
     def _parse_delete(self) -> DeleteStmt:
+        """Parsea una sentencia DELETE con condición WHERE opcional."""
         self._eat('KW', 'DELETE')
         self._eat('KW', 'FROM')
         table = self._eat('IDENT').value
@@ -300,24 +302,21 @@ class SQLParser:
         return DeleteStmt(table=table, condition=condition)
 
     def _parse_value(self):
+        """Parsea un valor (número, cadena, array)."""
         t = self._peek()
 
-        # Handle arrays [...]
         if t and t.type == 'PUNC' and t.value == '[':
             self._eat('PUNC', '[')
             array_values = []
 
-            # Empty array
             t = self._peek()
             if t and t.type == 'PUNC' and t.value == ']':
                 self._eat('PUNC', ']')
                 return array_values
 
-            # Parse array elements
             while True:
                 elem_t = self._peek()
 
-                # Handle negative/positive numbers with explicit sign
                 if elem_t and elem_t.type == 'OP' and elem_t.value in ('+', '-'):
                     sign = self._eat('OP').value
                     num_t = self._eat('NUMBER')
@@ -341,7 +340,6 @@ class SQLParser:
             self._eat('PUNC', ']')
             return array_values
 
-        # Handle negative/positive numbers outside arrays
         if t and t.type == 'OP' and t.value in ('+', '-'):
             sign = self._eat('OP').value
             num_t = self._eat('NUMBER')
@@ -350,7 +348,6 @@ class SQLParser:
                 num_val = -num_val
             return num_val
 
-        # Original value parsing
         t = self._eat()
         if t.type == 'NUMBER':
             return int(t.value) if t.value.isdigit() else float(t.value)

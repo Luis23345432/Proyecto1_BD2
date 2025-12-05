@@ -1,3 +1,8 @@
+"""Endpoints de la API para recuperación multimedia.
+
+Permite entrenar codebooks, construir índices BoW/invertidos,
+y buscar imágenes/audio similares usando SIFT, MFCC y k-means.
+"""
 from fastapi import APIRouter, UploadFile, File, Query, Body
 from fastapi.responses import FileResponse
 from typing import List, Optional
@@ -28,6 +33,7 @@ async def multimedia_search(
     strategy: str = Query("inverted", regex="^(sequential|inverted)$"),
     k: int = Query(10, ge=1, le=100),
 ):
+    """Busca archivos multimedia similares usando una imagen o audio como query."""
     base_dir = os.path.join("data", "multimedia", modality)
     codebook_path = os.path.join(base_dir, "codebook.pkl")
     if not os.path.exists(codebook_path):
@@ -101,6 +107,7 @@ async def multimedia_train_codebook(
     per_object_cap_q: Optional[int] = Query(None, ge=10, le=10000),
     global_cap_q: Optional[int] = Query(None, ge=1000, le=2_000_000),
 ):
+    """Entrena un codebook k-means para cuantizar descriptores de imágenes o audio."""
     if payload:
         modality = payload.modality
         data_root = payload.data_root
@@ -115,7 +122,6 @@ async def multimedia_train_codebook(
         k = k_q or 512
         per_object_cap = per_object_cap_q or 500
         global_cap = global_cap_q or 200_000
-    # Collect file paths
     paths: List[str] = []
     for root, _, files in os.walk(data_root):
         for f in files:
@@ -126,7 +132,6 @@ async def multimedia_train_codebook(
     if not paths:
         return {"ok": False, "error": "No files found in data_root"}
 
-    # Extract descriptors
     descs: List[np.ndarray] = []
     if modality == "image":
         from multimedia.features_image import batch_extract_sift
@@ -137,7 +142,6 @@ async def multimedia_train_codebook(
     if not descs:
         return {"ok": False, "error": "Descriptor extraction returned empty"}
 
-    # Sample and train
     samples = sample_descriptors(descs, per_object_cap=per_object_cap, global_cap=global_cap)
     km = train_codebook(samples, k=k, batch_size=max(1000, k*2), seed=42)
     base_dir = os.path.join("data", "multimedia", modality)
@@ -160,6 +164,7 @@ async def multimedia_build_index(
     data_root_q: Optional[str] = Query(None),
     index_type_q: Optional[str] = Query(None, regex="^(bow|inverted)$"),
 ):
+    """Construye índices BoW o invertidos para recuperación rápida de multimedia."""
     if payload:
         modality = payload.modality
         data_root = payload.data_root
@@ -175,7 +180,6 @@ async def multimedia_build_index(
     km, meta = load_codebook(codebook_path)
     centroids = km.cluster_centers_.astype(np.float32)
 
-    # Collect files and extract descriptors
     paths: List[str] = []
     for root, _, files in os.walk(data_root):
         for f in files:
@@ -195,7 +199,6 @@ async def multimedia_build_index(
     if not descs:
         return {"ok": False, "error": "Descriptor extraction returned empty"}
 
-    # Quantize
     hists = [quantize_descriptors(d, centroids) for d in descs]
 
     if index_type == "bow":
@@ -211,6 +214,7 @@ async def multimedia_build_index(
 
 @router.get("/status")
 async def multimedia_status(modality: Optional[str] = Query(None, regex="^(image|audio)$")):
+    """Verifica qué componentes multimedia están disponibles (codebook, BoW, índice invertido)."""
     def check(m: str):
         base_dir = os.path.join("data", "multimedia", m)
         codebook = os.path.exists(os.path.join(base_dir, "codebook.pkl"))
@@ -234,10 +238,9 @@ def _thumb_path(modality: str, doc_id: str) -> str:
 
 @router.get("/thumbnail")
 async def multimedia_thumbnail(modality: str = Query(..., regex="^(image)$"), doc_id: str = Query(...)):
-    # Generate or return cached thumbnail for an image doc_id
+    """Genera o retorna una miniatura en caché para una imagen."""
     thumb = _thumb_path(modality, doc_id)
     if not os.path.exists(thumb):
-        # Basic safety: only allow existing files
         if not os.path.exists(doc_id):
             return {"ok": False, "error": "File not found"}
         img = cv2.imread(doc_id)
@@ -252,7 +255,6 @@ async def multimedia_thumbnail(modality: str = Query(..., regex="^(image)$"), do
             new_w = target
             new_h = max(1, int(h * (target / w)))
         resized = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
-        # Pad to square
         canvas = np.zeros((target, target, 3), dtype=np.uint8)
         y0 = (target - new_h) // 2
         x0 = (target - new_w) // 2
@@ -263,7 +265,7 @@ async def multimedia_thumbnail(modality: str = Query(..., regex="^(image)$"), do
 
 @router.get("/preview")
 async def multimedia_preview(modality: str = Query(..., regex="^(image|audio)$"), doc_id: str = Query(...)):
-    # Serve original file (useful for audio or full images)
+    """Sirve el archivo multimedia original para vista previa."""
     if not os.path.exists(doc_id):
         return {"ok": False, "error": "File not found"}
     mime = mimetypes.guess_type(doc_id)[0] or "application/octet-stream"
