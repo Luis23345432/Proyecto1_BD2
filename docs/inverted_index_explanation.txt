@@ -1,0 +1,243 @@
+Guía clara sobre Índice Invertido y búsqueda (archivo generado)
+
+Objetivo
+- Explicar paso a paso todo lo relacionado con el índice invertido textual (Full-Text Search) en este repo.
+- Cubrir: tokenización, filtrado de stopwords, eliminación de signos, normalización/acento, stemming (reducción de palabras), y el proceso de merge usando una priority queue.
+- Describir funciones relevantes y dar ejemplos prácticos fáciles de seguir.
+
+Archivos clave (referencia)
+- `indexes/inverted_index.py` : implementación simple en memoria de índice invertido + tokenización, persistencia y búsqueda AND.
+- `indexes/spimi.py` : implementación SPIMI (bloques) que crea bloques, escribe archivos por bloque y realiza merge multi-way con una cola de prioridad (heapq). También contiene `search_topk` para ranking por similitud coseno.
+
+1) Tokenización y normalización (función `tokenize`)
+- Propósito: convertir un texto en una lista de 'tokens' (palabras) utilizables por el índice.
+- Pasos que realiza en el código:
+  1. Si `normalize=True`: hace `unicodedata.normalize('NFKD', s)` y elimina caracteres diacríticos (tildes/acentos). Resultado: búsqueda insensible a acentos.
+  2. Convierte el texto a minúsculas (`s.lower()`).
+  3. Usa la expresión regular `TOKEN_RE = re.compile(r"\w+", flags=re.UNICODE)` para extraer secuencias de caracteres alfanuméricos y guiones bajos. Esto elimina signos de puntuación (por ejemplo ", . ! ? : ; ( )").
+  4. Filtra stopwords usando el set `STOPWORDS` (ej.: "the", "a", "and", "in", ...). También descarta tokens de longitud <= 1.
+  5. Si `do_stem=True` intenta aplicar un stemmer Snowball (si está instalado). Si no, aplica heurística ligera (`rstrip('s')`) para quitar 's' finales (plural sencillo).
+
+- Ejemplos:
+  - Texto: "¡El rápido zorro marrón, saltó sobre los perros!"
+    - Normalización: "el rapido zorro marron, salto sobre los perros"
+    - Tokens por regex: ["el","rapido","zorro","marron","salto","sobre","los","perros"]
+    - Filtrado stopwords y corto: asumiendo STOPWORDS incluye "el","los","sobre": ["rapido","zorro","marron","salto","perros"]
+    - Stemming (sin Snowball, heurística): ["rapido","zorro","marron","salto","perro"]
+
+  - Texto con acentos: "Información"
+    - Normalizado y sin diacríticos -> "informacion" => token "informacion".
+
+- Notas:
+  - `\w+` permite números y guiones bajos. Si quisieras separar contracciones o manejar apóstrofes distinta, habría que cambiar la regex.
+  - Si el stemmer Snowball está disponible (`snowballstemmer`), se usa para obtener raíces robustas en español.
+
+2) Filtrado de Stopwords
+- Implementación: conjunto `STOPWORDS` en `inverted_index.py`.
+- Función: eliminar palabras vacías o muy comunes que aportan poco a la búsqueda ("the", "and", "in", ...).
+- Cómo se aplica: justo después de tokenizar (regex) se filtra: tokens = [t for t in tokens if t and t not in STOPWORDS and len(t) > 1]
+
+- Ejemplo: "en la casa" => tokens: ["en","la","casa"] => si "en" y "la" son stopwords, queda ["casa"].
+
+3) Eliminación de signos innecesarios
+- Se hace implícitamente mediante:
+  - Normalización y eliminación de diacríticos.
+  - Regex `\w+` que solo extrae caracteres de palabra (letras/dígitos/_). Así la puntuación se descarta.
+
+- Ejemplo: "hello-world! 2023." -> tokens: ["hello","world","2023"]
+
+4) Stemming (reducción de palabras)
+- Implementado con SnowballStemmer si está disponible.
+  - El módulo intenta `from snowballstemmer import stemmer as SnowballStemmer`.
+  - Si existe, usa `SnowballStemmer("spanish")` y llama `stemWords(tokens)`.
+- Fallback: si no está o falla, se usa heurística simple `t.rstrip('s')` para quitar la 's' final (plural simple).
+
+- Ejemplos:
+  - Con Snowball: "corriendo" -> "corr" (depende del stemmer exacto)
+  - Fallback: "perros" -> "perro"; "casas" -> "casa"; pero "taxis" -> "taxi" (no perfecto para todo caso)
+
+5) Estructura del índice en `InvertedIndex` (`indexes/inverted_index.py`)
+- Modelo de datos: `self.index` es un diccionario: term -> set de RIDs (RID = (page, slot)).
+- Funciones importantes:
+  - `__init__(do_stem=False)`: crea índice vacío y almacena si aplicar stemming.
+  - `add(text, rid)`: tokeniza `text` (usando `self.do_stem`) y añade el `rid` a cada término.
+  - `build_from_pairs(pairs)`: reconstruye el índice a partir de un iterable de (text, rid) llamando a `add` para cada par.
+  - `remove(key)`: si `key` es (p,s) elimina ese RID de todas las entradas; si `key` es texto, tokeniza y elimina por término.
+  - `search(query)`: realiza búsqueda con semántica AND (intersección de postings de cada término). Tiene múltiples estrategias de fallback (normalizado, sin normalizar, stemmed/no-stemmed) para mejorar compatibilidad.
+  - `get_terms()`: lista ordenada de términos.
+  - `save_idx(path)`: persiste a JSON con metadata `do_stem` y lista de postings por término.
+  - `load_idx(path)`: carga tanto formato nuevo (con `_meta` y `terms`) como formato antiguo.
+
+- Búsqueda `search(query)` (flujo resumido):
+  1. Tokeniza la query con el mismo esquema que el índice (normalización y stemming según `self.do_stem`).
+  2. Si no hay tokens -> []
+  3. Obtiene postings para cada término y hace intersección.
+  4. Si no encuentra resultados, aplica varias estrategias alternativas (por ejemplo, tokenizar sin normalizar, aplicar stem/un-stem según el índice) para intentar encontrar coincidencias.
+  5. Retorna RIDs ordenados.
+
+- Ejemplo:
+  - Índice con términos: {"casa": {(1,1),(2,5)}, "jardin": {(2,5)}}
+  - Query: "casa jardin" -> tokens ["casa","jardin"] -> intersección {(2,5)} -> resultado [(2,5)].
+
+6) SPIMI: construir bloques y merge multi-way (archivo `indexes/spimi.py`)
+- Propósito: permitir construir índices a gran escala sin cargar todo en RAM. Se procesa un flujo de documentos por bloques (por ejemplo 500 docs por bloque), cada bloque se ordena y se escribe a disco. Luego múltiples bloques se combinan (merge) en un índice final.
+
+- Funciones clave:
+  - `build_spimi_blocks(docs, block_dir, block_max_docs=500, do_stem=False)`:
+    - Lee `docs` que es iterable de (text, rid).
+    - Tokeniza cada documento y cuenta TF (frecuencia de término dentro de documento).
+    - Crea un diccionario `block`: term -> {docid: tf}
+    - Cuando el bloque alcanza `block_max_docs`, se escribe como `block_<id>.json` con el formato: term -> [[docid, tf], ...].
+    - Retorna `total_docs` procesados.
+
+  - `merge_blocks(block_dir, index_dir, total_docs=None)`:
+    - Recolecta todos los archivos de bloque `block_*.json` y para cada bloque carga y genera una lista ordenada `items = list(data.items())` ordenada por término.
+    - Crea una lista `block_iters` con cada bloque representado como `{'items': items, 'idx': 0, 'file': bf}`.
+    - Inicializa un heap (priority queue) con la primera tupla `(term0, block_idx)` de cada bloque.
+    - Ejecuta una multi-way merge usando un min-heap priorizando el término lexicográfico más pequeño (ver explicación detallada abajo).
+    - Para cada término agregado (agregación por término de todos los bloques), escribe un archivo per-term `index_dir/terms/<term_quoted>.json` con `{"df": df, "postings": [[docid, tf], ...]}`. `df` es document frequency (número de docids en postings).
+    - Luego calcula N (número de documentos) y `doc_norms` (para ranking TF-IDF) y escribe `meta.json`.
+
+7) Explicación detallada: Priority queue (heap) en el merge multi-way
+- Problema que resuelve: tenemos varios archivos de bloque, cada uno contiene una lista de pares (term -> postings) ordenada por término. Queremos emitir un único flujo ordenado de términos agregando postings de todos los bloques de forma ordenada y eficiente en memoria.
+
+- Por qué usar una priority queue (min-heap):
+  - Permite seleccionar rápidamente (O(log B) por extracción) el próximo término lexicográficamente menor entre las "cabezas" (current items) de B bloques.
+  - No necesita cargar todos los términos en memoria a la vez; sólo requiere la posición actual de cada bloque.
+
+- Estructura usada en el código:
+  - `block_iters`: lista donde cada elemento es un dict con `items` (lista ordenada de (term, postings)), `idx` (posición actual) y `file`.
+  - `heap`: lista usada como min-heap con entradas `(term, block_idx)`. Python `heapq` ordena primero por `term`.
+
+- Algoritmo (paso a paso):
+  1. Inicializa: por cada bloque i, toma su primer término term0 y hace `heappush(heap, (term0, i))`.
+  2. Mientras el heap no esté vacío:
+     a. `term, bidx = heappop(heap)` -> obtiene el término lexicográficamente menor entre las cabezas de los bloques.
+     b. Crea `agg = {}` para acumular postings (docid -> tf) de todos los bloques que apunten a `term`.
+     c. Procesa el bloque `bidx`: toma su item actual (de `b['items'][b['idx']]`), agrega sus postings al `agg`, incrementa `b['idx']` y si no acabó el bloque, empuja su siguiente término al heap.
+     d. Luego, mientras `heap` no esté vacío y `heap[0][0] == term` (otras cabezas coinciden con el mismo término), repite la extracción y agrega sus postings a `agg`. Para cada bloque consumido, avanza su `idx` y si hay siguiente, empuja su siguiente término al heap.
+     e. Al finalizar de agregar desde todos los bloques para `term`, se escribe el archivo per-term con los postings agregados y df.
+  3. Repetir hasta que el heap se vacíe (todos los items consumidos).
+
+- Complejidad:
+  - Cada extracción o inserción en el heap es O(log B) donde B es el número de bloques.
+  - Cada término de cada bloque se procesa exactamente una vez.
+  - Memoria: sólo se mantienen en memoria los `items` (listas) de cada bloque mientras están en proceso; si estos archivos son muy grandes la lectura previa (se carga el bloque entero en `items`) consume memoria. Optimización posible: usar streams/iteradores que lean por trozos en lugar de cargar todo el bloque. Aun así, el heap en sí es pequeño (tamaño ≤ B).
+
+- Ejemplo concreto (merge paso a paso):
+  Supongamos 3 bloques con items ordenados:
+  - Bloque A: [("apple", ...), ("banana", ...), ("date", ...)]
+  - Bloque B: [("apricot", ...), ("banana", ...), ("cherry", ...)]
+  - Bloque C: [("apple", ...), ("blue", ...), ("date", ...)]
+
+  Inicialmente heap = [("apple", A), ("apricot", B), ("apple", C)]
+  - heappop -> ("apple", A). agg = postings(A:"apple"). Avanzar A -> empujar "banana" desde A.
+  - heap ahora puede tener ("apple", C), ("apricot", B), ("banana", A)
+  - heap[0] es ("apple", C) y su término == "apple" así que lo extrajimos y agregamos postings(C:"apple") a agg. Avanzar C -> empujar "blue".
+  - Ya no hay más "apple" en heap; escribimos archivo para "apple" con postings combinadas de A y C.
+  - Repetimos: heappop -> ("apricot", B), etc.
+
+- Resultado: cada término final tendrá postings agregadas de todos los bloques.
+
+8) `search_topk` (ranking por similitud coseno, en `spimi.py`)
+- Flujo:
+  1. Carga `meta.json` (contiene N, doc_norms, num_terms).
+  2. Tokeniza la query con `tokenize(query, do_stem=do_stem)`.
+  3. Construye `q_tf` (frecuencia de términos en la query) y calcula `q_weights` (tf-idf) por término (usa `df` que recupera de `load_term_postings`).
+  4. Para cada término de la query, carga las postings (solo para esos términos) y acumula el producto punto `scores[docid] += q_w * w` donde `w` es el peso tf-idf del término en el documento.
+  5. Para obtener similitud coseno divide cada dot-product por `doc_norms[docid] * q_norm`.
+  6. Ordena por score descendente y devuelve top-k.
+
+- Nota: `search_topk` solo lee postings de disco para los términos de la query (I/O limitado), por eso es eficiente para consultas pequeñas.
+
+9) Funciones y responsabilidades (resumen por función)
+- `tokenize(text, *, do_stem=False, normalize=True)`:
+  - Input: cualquier `text`.
+  - Output: lista de tokens limpios (posiblemente stemmed).
+  - Responsabilidad: normalizar/acento-insensibilizar, regex split, filtrar stopwords, aplicar stem.
+
+- `InvertedIndex.__init__(do_stem=False)`:
+  - Inicializa `self.index: Dict[str, Set[Rid]]` y flag `self.do_stem`.
+
+- `InvertedIndex.add(text, rid)`:
+  - Tokeniza `text` y añade `rid` a cada término.
+
+- `InvertedIndex.build_from_pairs(pairs)`:
+  - Reconstruye índice desde iterador de pares (text, rid).
+
+- `InvertedIndex.remove(key)`:
+  - Si `key` es rid: remueve ese rid de todos los postings.
+  - Si `key` es texto: tokeniza y elimina el término del índice.
+
+- `InvertedIndex.search(query)`:
+  - Busca términos de la query y devuelve intersección de postings (AND).
+  - Tiene varios fallbacks (sin normalizar, stemmed/no-stemmed) para mejorar compatibilidad.
+
+- `InvertedIndex.save_idx(path)` / `load_idx(path)`:
+  - Persiste y carga en JSON, con soporte a formato nuevo (meta+terms) y antiguo.
+
+- `build_spimi_blocks(docs, block_dir, block_max_docs=500, do_stem=False)`:
+  - Construye bloques por lotes y escribe `block_<id>.json` con term -> [[docid, tf], ...].
+
+- `merge_blocks(block_dir, index_dir, total_docs=None)`:
+  - Realiza merge multi-way con heap y escribe archivos por término + `meta.json`.
+
+- `load_term_postings(index_dir, term)`:
+  - Lee el archivo per-term `terms/<term_quoted>.json` y devuelve `df, postings`.
+
+- `search_topk(index_dir, query, k=10, do_stem=False)`:
+  - Tokeniza la query, calcula pesos TF-IDF y devuelve los `k` documentos con mayor similitud coseno.
+
+10) Ejemplos prácticos completos
+A) Construcción rápida (in memory) con `InvertedIndex`:
+  - Pairs: [("La casa es grande", (1,1)), ("Casa azul", (2,1)), ("Perro en la casa", (3,1))]
+  - Índice tras `build_from_pairs` (simplificado, sin stemming y asumiendo stopwords = {"la","en","es"}):
+    - "casa": {(1,1),(2,1),(3,1)}
+    - "grande": {(1,1)}
+    - "azul": {(2,1)}
+    - "perro": {(3,1)}
+  - Query: "casa" -> retorna [(1,1),(2,1),(3,1)] ordenado.
+  - Query: "casa grande" -> términos ["casa","grande"] -> intersección -> [(1,1)].
+
+B) SPIMI (bloques) y merge con heap
+  - Supongamos `block_0.json` contiene:
+      {"apple": [["1_1",2]], "banana": [["1_2",1]]}
+    `block_1.json` contiene:
+      {"apple": [["2_1",1]], "cherry": [["2_2",3]]}
+  - Al iniciar `merge_blocks`, los items de cada bloque se ordenan y el heap se inicializa con ('apple',0) y ('apple',1) (si ambos empiezan con 'apple').
+  - Se extrae 'apple' del heap, se agregan los postings de ambos bloques y se escribe `terms/apple.json` con postings combinadas: [["1_1",2],["2_1",1]] y df=2.
+
+11) Buenas prácticas y recomendaciones
+- Si trabajas a gran escala, asegúrate de:
+  - Establecer `block_max_docs` a un valor que equilibre uso de memoria y número de archivos bloque.
+  - Si los bloques son muy grandes, refactorizar `merge_blocks` para no cargar `items=list(data.items())` completo, sino usar iteradores o leer en streaming (por ejemplo archivos ordenados externos).
+  - Instalar un stemmer robusto (`pip install snowballstemmer`) para buena calidad de stemming en español.
+  - Expandir `STOPWORDS` con una lista en español más completa.
+
+12) Posibles mejoras (ideas para siguientes pasos)
+- Soportar proximidad/phrases (posiciones en postings en vez de solo docid/tf).
+- Compresión de postings (delta-encoding, variable-byte) para ahorro de espacio.
+- Lectura perezosa (lazy) de bloques y term-files para memoria reducida.
+- Hacer tokenización más rica (manejar apóstrofes, contracciones, emojis si aplica).
+
+13) Preguntas frecuentes (FAQ)
+- P: ¿Por qué se normalizan acentos? R: Para que "información" y "informacion" coincidan y mejorar recall.
+- P: ¿Por qué usar plural-trim como fallback? R: Es una heurística simple cuando no hay un stemmer instalado; no es perfecta.
+- P: ¿Por qué escribir `terms/<term>.json` en lugar de un único archivo grande? R: Facilita lecturas por término (I/O dirigido) y evita leer un archivo gigante para consultas pequeñas.
+
+14) Resumen corto (para recordar)
+- `tokenize` = normaliza, quita acentos, lower, regex `\w+`, filtra stopwords, aplica stem.
+- `InvertedIndex` = estructura simple term -> set(rids) con búsqueda AND y persistencia JSON.
+- `build_spimi_blocks` = construye bloques por lotes con tf por documento.
+- `merge_blocks` = usa un heap (priority queue) para multi-way merge ordenado por término; agrega postings de todos los bloques de forma eficiente.
+- `search_topk` = ranking TF-IDF por similitud coseno leyendo solo términos de la query.
+
+Archivo creado:
+- `docs/inverted_index_explanation.txt` (este archivo)
+
+Si quieres, puedo:
+- Abrir/mostrar el contenido en el editor ahora.
+- Añadir ejemplos ejecutables pequeños (scripts) que generen bloques y muestren el merge paso a paso.
+- Expandir el documento con diagramas ASCII o trazas más detalladas del heap durante el merge.
+
+Fin del documento.

@@ -1,0 +1,121 @@
+Explicación simple: ¿Qué es un RID y cómo funciona el flujo del índice invertido (Full-Text)
+
+Resumen rápido
+- RID significa "Record ID" o identificador de registro. En este proyecto se usa una tupla `(page, slot)` para representar de forma única una fila/documento dentro del almacenamiento.
+  - `page`: número de página (un bloque o página física lógica donde se almacenan varias filas).
+  - `slot`: posición dentro de esa página (la fila dentro de la página).
+- El índice invertido relaciona cada "término" (palabra procesada) con el conjunto de RIDs donde ese término aparece.
+- Buscar significa: convertir la consulta en términos, recuperar las listas de RIDs para cada término y combinar (p. ej. intersección para AND) para obtener los registros que coinciden.
+
+Por qué usar RIDs
+- Son pequeños, únicos y fijos por cada fila. Permiten localizar rápidamente el registro en el almacenamiento sin copiar todo el contenido.
+- Ejemplo de un RID: `(2, 5)` significa página 2, slot 5. Otra representación corta que aparece en el repo es `"2_5"` (string) usada por SPIMI cuando se escribe en disco.
+
+Flujo completo (paso a paso) — Caso simple (índice en memoria con `InvertedIndex`)
+1) Crear una tabla con índice full-text en una columna
+   - Paso conceptual: cuando defines la tabla y marcas una columna como `FULLTEXT` (o cuando quieres activar búsqueda full-text), el sistema crea internamente una estructura tipo `InvertedIndex` vacía para esa columna.
+   - En el código: se instanciaría `InvertedIndex(do_stem=...)` para esa columna.
+
+2) Subir (importar) un CSV
+   - Por cada fila del CSV:
+     a) Se genera un RID único para la fila. Por ejemplo, la primera fila puede recibir RID `(1,1)`, la segunda `(1,2)`, etc., o según cómo el motor organice páginas.
+     b) Se extrae el texto de la columna indexada (por ejemplo `descripcion`).
+     c) Se llama `index.add(texto, rid)` (en `InvertedIndex.add`) que realiza:
+        - `tokenize(texto)`: convierte el texto en tokens limpios (minúsculas, sin acentos, sin puntuación, elimina stopwords y opcionalmente aplica stemming).
+        - Por cada token `t` resultante, añade el `rid` al conjunto `self.index[t]`.
+   - Resultado incremental: el índice en memoria acumula mappings `term -> set(RIDs)`.
+
+3) Ejemplo concreto (CSV pequeño)
+CSV (columnas: id, descripcion)
+1, "Casa con jardín y piscina"
+2, "Casa azul con jardín"
+3, "Apartamento céntrico sin jardín"
+
+Asignación de RIDs (ejemplo simple):
+- fila 1 -> RID `(1,1)`  (page 1, slot 1)
+- fila 2 -> RID `(1,2)`
+- fila 3 -> RID `(1,3)`
+
+Tokenización (sin stemming, suponiendo STOPWORDS = {"con","sin"}):
+- fila 1 tokens: ["casa", "jardin", "piscina"]
+- fila 2 tokens: ["casa", "azul", "jardin"]
+- fila 3 tokens: ["apartamento", "centrico", "jardin"]
+
+Índice resultante (`term -> set(RIDs)`):
+- "casa" -> {(1,1), (1,2)}
+- "jardin" -> {(1,1), (1,2), (1,3)}
+- "piscina" -> {(1,1)}
+- "azul" -> {(1,2)}
+- "apartamento" -> {(1,3)}
+- "centrico" -> {(1,3)}
+
+4) Hacer una consulta de búsqueda — ejemplo: query "casa jardin"
+Paso a paso:
+ a) Tokenizar la query: `tokenize("casa jardin")` -> ["casa","jardin"]
+ b) Recuperar postings (conjuntos de RIDs):
+    - postings("casa") -> {(1,1), (1,2)}
+    - postings("jardin") -> {(1,1), (1,2), (1,3)}
+ c) Aplicar semántica AND (intersección):
+    - intersection = {(1,1), (1,2)} ∩ {(1,1), (1,2), (1,3)} = {(1,1), (1,2)}
+ d) Resultado final: RIDs {(1,1), (1,2)}
+ e) Mapear cada RID a la fila original en la tabla (leer página 1 slot 1 y página 1 slot 2) para devolver los registros completos al usuario.
+
+Explicación de por qué funciona la intersección:
+- AND significa: el documento (fila) debe contener todos los términos. Solo los RIDs que estén presentes en las postings de todos los términos cumplen esto.
+
+Flujo para búsqueda con una sola palabra — ejemplo: "piscina"
+- `tokenize("piscina")` -> ["piscina"]
+- postings("piscina") -> {(1,1)}
+- Resultado: devolver RID `(1,1)` -> leer fila 1.
+
+¿Qué pasa si no hay resultados directos?
+- `InvertedIndex.search` implementa varios intentos de compatibilidad:
+  - Intenta tokenizar con/ sin normalización (acentos)
+  - Intenta con/sin stemming si el índice y la consulta tienen diferencias
+  - Si no encuentra nada, devuelve lista vacía
+
+Caso a escala: uso de SPIMI y archivos en disco (cuando el CSV es muy grande)
+- Cuando el CSV es grande no mantenemos todo en memoria. Se usa el flujo:
+  1. `build_spimi_blocks`: procesa documentos por bloques (por ejemplo 500 filas por bloque). Cada bloque produce un archivo `block_<id>.json` con `term -> [[docid, tf], ...]` donde `docid` suele ser el RID en formato string (ej. "1_2").
+  2. Después de crear varios bloques, se ejecuta `merge_blocks(block_dir, index_dir)` que:
+     - Carga cada bloque, ordena los términos dentro del bloque.
+     - Usa un `heap` (priority queue) para hacer un merge multi-way: lee el término más pequeño lexicográficamente de las "cabezas" de cada bloque y agrega sus postings combinadas para producir archivos por término en `index_dir/terms/<term>.json`.
+     - Cada archivo por término contiene `df` (nº de documentos) y `postings` (lista de [docid, tf]).
+  3. También crea `meta.json` que incluye `N` (# documentos) y `doc_norms` (normas de documentos para ranking TF-IDF).
+- En este flujo, `docid` es la representación del RID como string, por ejemplo "1_2".
+
+Búsqueda con ranking (`search_topk`) sobre índice SPIMI
+- `search_topk(index_dir, query, k)` hace:
+  1. Tokeniza la query.
+  2. Para cada término de la query, lee solo `terms/<term>.json` (si existe) y obtiene `df` y `postings`.
+  3. Calcula pesos TF-IDF para query y para cada documento listado en las postings y acumula productos punto.
+  4. Divide por las normas de documento (`doc_norms`) para obtener similitud coseno.
+  5. Devuelve los top-k documentos ordenados por score. Los `docid` son strings como "1_2" que puedes convertir a RID `(1,2)` y leer la fila.
+
+Ejemplo simple con ranking (mismo CSV): búsqueda "jardin"
+- df("jardin") = 3 (aparece en 3 filas)
+- N = 3
+- idf = log((N+1)/df) = log(4/3)
+- Para cada doc en postings se calcula tfw y peso y se obtiene un score; con datos reducidos puede que todas tengan valores similares, pero `search_topk` retornará los documentos con mayor peso.
+
+Resumen de términos clave y traducciones simples
+- RID: identificador único de fila, representado como `(page, slot)` o como string `"page_slot"`.
+- Posting/postings: la lista o conjunto de RIDs donde aparece un término.
+- df (document frequency): cuántos documentos contienen el término.
+- tf (term frequency): cuántas veces aparece el término dentro de un documento.
+- tf-idf: combinación de tf (dentro del doc) e idf (raro en la colección) para ponderar términos.
+- heap / priority queue: estructura usada en el merge para obtener el siguiente término ordenado entre varios archivos (bloques).
+
+Qué necesitas hacer en práctica para usar esto en tu proyecto
+- Si trabajas con pocos datos o quieres entender el comportamiento, usa `InvertedIndex` en memoria:
+  - Crea el índice: `idx = InvertedIndex(do_stem=False)`
+  - Inserta filas: `idx.add(texto, (page, slot))` por cada fila al subir CSV.
+  - Busca: `idx.search("mi consulta")` -> lista de RIDs.
+- Si vas a indexar muchos documentos (CSV grande), usa el flujo SPIMI:
+  - Llama `build_spimi_blocks(docs_iterable, block_dir, block_max_docs=500)` donde `docs_iterable` produce `(texto, (page,slot))`.
+  - Luego `merge_blocks(block_dir, index_dir, total_docs)` para crear el índice en disco.
+  - Busca con `search_topk(index_dir, query, k, do_stem=...)` o cargando `load_term_postings` y manejando la lógica de coincidencia tú mismo.
+
+¿Quieres que añada:
+- Un script pequeño que recorra un CSV de ejemplo, cree RIDs y construya el índice en memoria y muestre la búsqueda paso a paso? (Puedo crearlo y ejecutarlo aquí si quieres.)
+- Una versión visual de la traza del heap durante `merge_blocks` para entender cómo se combinan los bloques?
